@@ -1,7 +1,7 @@
 import { v2 as cloudinary, type UploadApiResponse } from "cloudinary";
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-export const runtime = "nodejs";
+
 
 const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set([
@@ -52,8 +52,8 @@ export async function POST(request: Request) {
     }
 
   const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
-  const apiKey = process.env.CLOUDINARY_API_KEY;
-  const apiSecret = process.env.CLOUDINARY_API_SECRET;
+  const apiKey = process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY;
+  const apiSecret = process.env.NEXT_PUBLIC_CLOUDINARY_API_SECRET;
 
   if (!cloudName || !apiKey || !apiSecret) {
     return NextResponse.json(
