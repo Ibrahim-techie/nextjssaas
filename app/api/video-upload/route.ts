@@ -159,10 +159,11 @@ export async function POST(request: Request) {
       data: {
         title: title.trim(),
         description: description.trim(),
-        originalSize: String((file.size/1024)/1024)+ " MB",// Convert bytes to MB
+        originalSize: String(file.size),
         publicId: uploaded.public_id,
-        compressedSize: String(uploaded.bytes)+ " MB",// Convert bytes to MB
+        compressedSize: String(uploaded.bytes),
         duration: uploaded.duration ?? 0,
+        userId,
       },
     });
 

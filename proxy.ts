@@ -12,11 +12,12 @@ export default clerkMiddleware(async (auth, req) => {
   const apiRequest = url.pathname.startsWith("/api");
 
   const isPublicApiRequest =
-    url.pathname.startsWith("/api/public");
+    url.pathname === "/api/public" ||
+    url.pathname.startsWith("/api/public/");
 
   // Public routes
   const isPublicPaths = [
-    "/home",
+    "/",
     "/sign-in",
     "/sign-up",
     "/forgot-password",
@@ -46,7 +47,7 @@ export default clerkMiddleware(async (auth, req) => {
   ) {
     return NextResponse.redirect(
       new URL("/home", req.url),
-      308
+      307
     );
   }
 
