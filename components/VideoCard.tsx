@@ -3,7 +3,13 @@
 import { useState } from "react";
 import Image from "next/image";
 import { getCldImageUrl, getCldVideoUrl } from "next-cloudinary";
-import { ArrowDownToLine, CheckCircle2, Clock3, Play, Video as VideoIcon } from "lucide-react";
+import {
+  ArrowDownToLine,
+  CheckCircle2,
+  Clock3,
+  Play,
+  Video as VideoIcon,
+} from "lucide-react";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import { filesize } from "filesize";
@@ -38,6 +44,7 @@ export default function VideoCard({ video }: { video: Video }) {
     ? Math.round((savedBytes / originalBytes) * 100)
     : 0;
 
+  const [isHovered, setIsHovered] = useState(false);
   const thumbnailUrl = getCldImageUrl({
     src: video.publicId,
     assetType: "video",
@@ -64,19 +71,33 @@ export default function VideoCard({ video }: { video: Video }) {
     assetType: "video",
     flags: "attachment",
   });
+  const shouldPlayPreview = isHovered || showPreview;
 
   return (
     <article className="overflow-hidden rounded-3xl border border-base-300/70 bg-base-100 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-xl">
-      <div className="group relative aspect-video overflow-hidden bg-neutral-950">
-        {showPreview ? (
+      <div
+        className="group relative aspect-video overflow-hidden bg-neutral"
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => {
+          setIsHovered(false);
+          setShowPreview(false);
+        }}
+      >
+        {shouldPlayPreview ? (
           <video
             src={previewUrl}
             poster={thumbnailUrl}
-            controls
+            preload="metadata"
             autoPlay
+            loop
+            muted
             playsInline
+            controls={showPreview}
             className="h-full w-full object-contain"
-            onError={() => setShowPreview(false)}
+            onError={() => {
+              setShowPreview(false);
+              setIsHovered(false);
+            }}
           />
         ) : (
           <>
@@ -92,15 +113,15 @@ export default function VideoCard({ video }: { video: Video }) {
               type="button"
               onClick={() => setShowPreview(true)}
               aria-label={`Preview ${video.title}`}
-              className="absolute inset-0 grid place-items-center bg-neutral-950/15 transition hover:bg-neutral-950/30"
+              className="absolute inset-0 grid place-items-center bg-neutral/15 transition hover:bg-neutral/30"
             >
-              <span className="grid h-14 w-14 place-items-center rounded-full border border-white/30 bg-white/90 text-neutral-950 shadow-lg transition group-hover:scale-105">
+              <span className="grid h-14 w-14 place-items-center rounded-full border border-neutral-content/30 bg-base-100/95 text-neutral shadow-lg transition group-hover:scale-105">
                 <Play className="ml-1 h-5 w-5 fill-current" />
               </span>
             </button>
           </>
         )}
-        <span className="absolute bottom-3 right-3 flex items-center gap-1.5 rounded-lg bg-neutral-950/75 px-2.5 py-1.5 text-xs font-medium text-white backdrop-blur">
+        <span className="absolute bottom-3 right-3 flex items-center gap-1.5 rounded-lg bg-neutral/80 px-2.5 py-1.5 text-xs font-medium text-neutral-content backdrop-blur">
           <Clock3 className="h-3.5 w-3.5" />
           {formatDuration(video.duration)}
         </span>
@@ -147,8 +168,8 @@ export default function VideoCard({ video }: { video: Video }) {
           <div className="flex min-w-0 items-center gap-2 text-sm">
             {savedPercent > 0 ? (
               <>
-                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
-                <span className="truncate font-medium text-emerald-700">
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-success" />
+                <span className="truncate font-medium text-success">
                   {savedPercent}% smaller
                 </span>
               </>
