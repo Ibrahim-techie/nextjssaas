@@ -89,27 +89,27 @@ export default function VideoUploadPage() {
       </Link>
 
       <div className="grid overflow-hidden rounded-[2rem] border border-base-300/70 bg-base-100 shadow-sm lg:grid-cols-[0.8fr_1.2fr]">
-        <section className="relative overflow-hidden bg-neutral-950 p-7 text-white sm:p-9">
-          <div className="absolute -right-20 -top-16 h-64 w-64 rounded-full bg-indigo-500/30 blur-3xl" />
-          <div className="absolute -bottom-20 -left-20 h-64 w-64 rounded-full bg-cyan-400/15 blur-3xl" />
+        <section className="relative overflow-hidden bg-neutral p-7 text-neutral-content sm:p-9">
+          <div className="absolute -right-20 -top-16 h-64 w-64 rounded-full bg-primary/30 blur-3xl" />
+          <div className="absolute -bottom-20 -left-20 h-64 w-64 rounded-full bg-accent/25 blur-3xl" />
           <div className="relative flex h-full flex-col">
-            <span className="grid h-12 w-12 place-items-center rounded-2xl border border-white/15 bg-white/10 text-cyan-200">
+            <span className="grid h-12 w-12 place-items-center rounded-2xl border border-neutral-content/20 bg-neutral-content/10 text-accent">
               <Film className="h-6 w-6" />
             </span>
-            <p className="mt-8 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200/80">
+            <p className="mt-8 text-xs font-semibold uppercase tracking-[0.18em] text-accent">
               Add to your library
             </p>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
               Bring your next story in.
             </h1>
-            <p className="mt-4 max-w-sm text-sm leading-6 text-white/60">
+            <p className="mt-4 max-w-sm text-sm leading-6 text-neutral-content/70">
               Upload one video and keep its optimized version, file details, and
               download together in your private workspace.
             </p>
-            <div className="mt-auto space-y-3 pt-10 text-sm text-white/75">
-              <p className="flex items-center gap-2.5"><CheckCircle2 className="h-4 w-4 text-emerald-300" /> Up to 100 MB per upload</p>
-              <p className="flex items-center gap-2.5"><CheckCircle2 className="h-4 w-4 text-emerald-300" /> MP4, MOV, WebM, and more</p>
-              <p className="flex items-center gap-2.5"><CheckCircle2 className="h-4 w-4 text-emerald-300" /> Only visible in your account</p>
+            <div className="mt-auto space-y-3 pt-10 text-sm text-neutral-content/85">
+              <p className="flex items-center gap-2.5"><CheckCircle2 className="h-4 w-4 text-accent" /> Up to 100 MB per upload</p>
+              <p className="flex items-center gap-2.5"><CheckCircle2 className="h-4 w-4 text-accent" /> MP4, MOV, WebM, and more</p>
+              <p className="flex items-center gap-2.5"><CheckCircle2 className="h-4 w-4 text-accent" /> Only visible in your account</p>
             </div>
           </div>
         </section>

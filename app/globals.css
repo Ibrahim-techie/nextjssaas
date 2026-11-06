@@ -1,11 +1,48 @@
 @import "tailwindcss";
 
 @plugin "daisyui" {
-  themes: light --default dark --preference;
+  themes: false;
+}
+
+@plugin "daisyui/theme" {
+  name: "frameflow";
+  default: true;
+  prefersdark: false;
+  color-scheme: light;
+
+  --color-base-100: #fff8f9;
+  --color-base-200: #fdebed;
+  --color-base-300: #f8b6bf;
+  --color-base-content: #380411;
+
+  --color-primary: #e82d5e;
+  --color-primary-content: #ffffff;
+  --color-secondary: #a91e42;
+  --color-secondary-content: #ffffff;
+  --color-accent: #f57a8e;
+  --color-accent-content: #380411;
+  --color-neutral: #6e1028;
+  --color-neutral-content: #fdebed;
+
+  --color-info: #f57a8e;
+  --color-info-content: #380411;
+  --color-success: #a91e42;
+  --color-success-content: #ffffff;
+  --color-warning: #f8b6bf;
+  --color-warning-content: #380411;
+  --color-error: #e82d5e;
+  --color-error-content: #ffffff;
+
+  --radius-selector: 0.75rem;
+  --radius-field: 0.75rem;
+  --radius-box: 1.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
 }
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
   font-family: Arial, Helvetica, sans-serif;
 }
 
@@ -15,10 +52,28 @@ html {
 
 body {
   margin: 0;
-  background: #f7f8fa;
+  background: var(--color-base-200);
 }
 
 ::selection {
-  color: #fff;
-  background: #C76E00;
+  color: var(--color-primary-content);
+  background: var(--color-primary);
+}
+
+[data-sonner-toaster][data-sonner-theme="light"] {
+  --normal-bg: var(--color-base-100);
+  --normal-border: var(--color-base-300);
+  --normal-text: var(--color-base-content);
+  --success-bg: color-mix(in srgb, var(--color-success) 10%, var(--color-base-100));
+  --success-border: color-mix(in srgb, var(--color-success) 24%, var(--color-base-100));
+  --success-text: var(--color-success);
+  --info-bg: color-mix(in srgb, var(--color-info) 14%, var(--color-base-100));
+  --info-border: color-mix(in srgb, var(--color-info) 28%, var(--color-base-100));
+  --info-text: var(--color-secondary);
+  --warning-bg: color-mix(in srgb, var(--color-warning) 35%, var(--color-base-100));
+  --warning-border: var(--color-warning);
+  --warning-text: var(--color-base-content);
+  --error-bg: color-mix(in srgb, var(--color-error) 10%, var(--color-base-100));
+  --error-border: color-mix(in srgb, var(--color-error) 24%, var(--color-base-100));
+  --error-text: var(--color-secondary);
 }

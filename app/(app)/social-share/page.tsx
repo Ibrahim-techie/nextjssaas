@@ -242,7 +242,7 @@ export default function SocialMediaCreator() {
         <section className="rounded-3xl border border-base-300/70 bg-base-100 p-5 shadow-sm sm:p-6">
           <div>
             <div className="flex items-center gap-3">
-              <span className="grid h-10 w-10 place-items-center rounded-xl bg-sky-500/10 text-sky-700">02</span>
+              <span className="grid h-10 w-10 place-items-center rounded-xl bg-secondary/10 text-secondary">02</span>
               <div>
                 <h2 className="font-semibold tracking-tight">Choose a destination</h2>
                 <p className="text-xs text-base-content/50">We’ll crop and resize it for you.</p>
@@ -294,12 +294,12 @@ export default function SocialMediaCreator() {
                     {currentFormat ? `${currentFormat.name} preview` : "Your image preview"}
                   </h2>
                 </div>
-                {currentFormat && <span className="w-fit rounded-full bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-700">{currentFormat.width} × {currentFormat.height}</span>}
+                {currentFormat && <span className="w-fit rounded-full bg-success/10 px-3 py-1.5 text-xs font-semibold text-success">{currentFormat.width} × {currentFormat.height}</span>}
               </div>
             </div>
 
             <div className="p-5 sm:p-6">
-              <div className="relative flex min-h-64 items-center justify-center overflow-hidden rounded-2xl bg-[linear-gradient(45deg,#f1f2f6_25%,transparent_25%),linear-gradient(-45deg,#f1f2f6_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#f1f2f6_75%),linear-gradient(-45deg,transparent_75%,#f1f2f6_75%)] bg-[length:24px_24px] bg-[position:0_0,0_12px,12px_-12px,-12px_0px] p-5 sm:min-h-80">
+              <div className="relative flex min-h-64 items-center justify-center overflow-hidden rounded-2xl border border-base-300/70 bg-base-200 p-5 sm:min-h-80">
                 {isTransforming && (
                   <div className="absolute inset-0 z-10 flex items-center justify-center bg-base-100/75 backdrop-blur-sm" aria-live="polite">
                     <span className="loading loading-spinner loading-md text-primary" aria-label="Preparing preview" />

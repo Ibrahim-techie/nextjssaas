@@ -98,19 +98,19 @@ export default function Home() {
 
   return (
     <div className="space-y-9 pb-12">
-      <section className="relative isolate overflow-hidden rounded-[2rem] bg-neutral-950 px-6 py-9 text-white shadow-xl sm:px-10 sm:py-12">
+      <section className="relative isolate overflow-hidden rounded-[2rem] bg-neutral px-6 py-9 text-neutral-content shadow-xl sm:px-10 sm:py-12">
         <div className="absolute -right-16 -top-28 -z-10 h-80 w-80 rounded-full bg-primary/40 blur-3xl" />
-        <div className="absolute -bottom-40 left-1/3 -z-10 h-80 w-80 rounded-full bg-cyan-400/15 blur-3xl" />
+        <div className="absolute -bottom-40 left-1/3 -z-10 h-80 w-80 rounded-full bg-accent/25 blur-3xl" />
         <div className="relative flex flex-col justify-between gap-8 lg:flex-row lg:items-end">
           <div className="max-w-2xl">
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-medium text-white/80">
-              <Sparkles className="h-3.5 w-3.5 text-cyan-300" />
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-neutral-content/20 bg-neutral-content/10 px-3 py-1.5 text-xs font-medium text-neutral-content/85">
+              <Sparkles className="h-3.5 w-3.5 text-accent" />
               Your media workspace
             </div>
             <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
               Make every video ready to share.
             </h1>
-            <p className="mt-3 max-w-xl text-sm leading-6 text-white/65 sm:text-base">
+            <p className="mt-3 max-w-xl text-sm leading-6 text-neutral-content/70 sm:text-base">
               Keep your uploads organized, see how much space you save, and
               create polished visuals for every social channel.
             </p>
@@ -122,7 +122,7 @@ export default function Home() {
             </Link>
             <Link
               href="/social-share"
-              className="btn btn-ghost border border-white/20 text-white hover:bg-white/10 hover:border-white/30"
+              className="btn btn-ghost border border-neutral-content/25 text-neutral-content hover:border-neutral-content/40 hover:bg-neutral-content/10"
             >
               Create social image
               <ArrowUpRight className="h-4 w-4" />
@@ -147,7 +147,7 @@ export default function Home() {
         <div className="rounded-2xl border border-base-300/70 bg-base-100 p-5 shadow-sm">
           <div className="flex items-center justify-between">
             <p className="text-sm font-medium text-base-content/60">Original media</p>
-            <span className="grid h-10 w-10 place-items-center rounded-xl bg-sky-500/10 text-sky-600">
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-secondary/10 text-secondary">
               <HardDrive className="h-5 w-5" />
             </span>
           </div>
@@ -159,7 +159,7 @@ export default function Home() {
         <div className="rounded-2xl border border-base-300/70 bg-base-100 p-5 shadow-sm">
           <div className="flex items-center justify-between">
             <p className="text-sm font-medium text-base-content/60">Space saved</p>
-            <span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-500/10 text-emerald-600">
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-accent/20 text-secondary">
               <Sparkles className="h-5 w-5" />
             </span>
           </div>
