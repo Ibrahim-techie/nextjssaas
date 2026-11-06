@@ -3,15 +3,19 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-export const runtime = "nodejs";
+
+
+
 
 const MAX_VIDEO_SIZE_BYTES = 100 * 1024 * 1024;
 const ALLOWED_VIDEO_TYPES = new Set([
+  "video/mp3",
   "video/mp4",
   "video/quicktime",
   "video/webm",
   "video/x-m4v",
   "video/x-msvideo",
+  "video/x-ms-wmv",
   "video/mpeg",
   "video/ogg",
 ]);
@@ -155,7 +159,7 @@ export async function POST(request: Request) {
       data: {
         title: title.trim(),
         description: description.trim(),
-        originalSize: String(file.size),
+        originalSize: String((file.size/1024)/1024)+ " MB",// Convert bytes to MB
         publicId: uploaded.public_id,
         compressedSize: String(uploaded.bytes),
         duration: uploaded.duration ?? 0,
