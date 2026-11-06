@@ -161,7 +161,7 @@ export async function POST(request: Request) {
         description: description.trim(),
         originalSize: String((file.size/1024)/1024)+ " MB",// Convert bytes to MB
         publicId: uploaded.public_id,
-        compressedSize: String(uploaded.bytes),
+        compressedSize: String(uploaded.bytes)+ " MB",// Convert bytes to MB
         duration: uploaded.duration ?? 0,
       },
     });

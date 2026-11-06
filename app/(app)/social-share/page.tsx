@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { CldImage } from "next-cloudinary";
+import Image from "next/image";
+import { getCldImageUrl } from "next-cloudinary";
 
 type SocialFormatKey =
   | "instagram"
@@ -52,6 +53,8 @@ const socialFormats: Record<SocialFormatKey, SocialFormat> = {
   },
 };
 
+const MAX_PREVIEW_DIMENSION = 1600;
+
 export default function SocialMediaCreator() {
   const [uploadedImage, setUploadedImage] = useState<UploadedAsset | null>(
     null,
@@ -60,7 +63,7 @@ export default function SocialMediaCreator() {
   const [selectedFormat, setSelectedFormat] = useState<SocialFormatKey | "">(
     "",
   );
-
+  const [isTransforming, setIsTransforming] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState("");
 
@@ -129,6 +132,42 @@ export default function SocialMediaCreator() {
   };
 
   const currentFormat = selectedFormat ? socialFormats[selectedFormat] : null;
+  const previewScale = uploadedImage
+    ? Math.min(
+        1,
+        MAX_PREVIEW_DIMENSION / uploadedImage.width,
+        MAX_PREVIEW_DIMENSION / uploadedImage.height,
+      )
+    : 1;
+  const previewWidth = uploadedImage
+    ? Math.max(1, Math.round(uploadedImage.width * previewScale))
+    : 1;
+  const previewHeight = uploadedImage
+    ? Math.max(1, Math.round(uploadedImage.height * previewScale))
+    : 1;
+  const previewUrl = uploadedImage
+    ? getCldImageUrl({
+        src: uploadedImage.publicId,
+        width: currentFormat?.width ?? previewWidth,
+        height: currentFormat?.height ?? previewHeight,
+        crop: currentFormat ? "fill" : "limit",
+        gravity: currentFormat ? "auto" : undefined,
+        quality: "auto",
+        format: "auto",
+      })
+    : "";
+  const downloadUrl = uploadedImage && currentFormat
+    ? getCldImageUrl({
+        src: uploadedImage.publicId,
+        width: currentFormat.width,
+        height: currentFormat.height,
+        crop: "fill",
+        gravity: "auto",
+        quality: "auto",
+        format: "auto",
+        flags: "attachment",
+      })
+    : "";
 
   return (
     <main className="min-h-screen bg-base-200 px-4 py-12">
@@ -199,9 +238,10 @@ export default function SocialMediaCreator() {
             <select
               className="select select-bordered w-full"
               value={selectedFormat}
-              onChange={(e) =>
-                setSelectedFormat(e.target.value as SocialFormatKey | "")
-              }
+              onChange={(e) => {
+                setSelectedFormat(e.target.value as SocialFormatKey | "");
+                setIsTransforming(true);
+              }}
               disabled={!uploadedImage}
             >
               <option value="" disabled>
@@ -238,21 +278,24 @@ export default function SocialMediaCreator() {
               </h2>
 
               <div className="flex justify-center bg-base-200 rounded-xl p-6">
-                <CldImage
+                {isTransforming && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-base-200/75">
+                    <span className="animate-spin loading loading-spinner"></span>
+                  </div>
+                )}
+                <Image
                   key={`${uploadedImage.publicId}-${selectedFormat}`}
-                  src={uploadedImage.publicId}
-                  width={currentFormat?.width ?? uploadedImage.width}
-                  height={currentFormat?.height ?? uploadedImage.height}
-                  crop={currentFormat ? "fill" : undefined}
-                  gravity={currentFormat ? "auto" : undefined}
-                  quality="auto"
-                  format="auto"
+                  src={previewUrl}
+                  unoptimized
+                  width={currentFormat?.width ?? previewWidth}
+                  height={currentFormat?.height ?? previewHeight}
+                  onLoad={() => setIsTransforming(false)}
                   alt={
                     currentFormat
                       ? "Transformed social media image"
                       : "Uploaded image"
                   }
-                  className="max-h-96 max-w-full object-contain rounded-lg"
+                  className="rounded-lg max-w-full h-auto"
                 />
               </div>
 
@@ -266,12 +309,10 @@ export default function SocialMediaCreator() {
 
                 {currentFormat && (
                   <a
-                    href={`https://res.cloudinary.com/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload/c_fill,g_auto,w_${currentFormat.width},h_${currentFormat.height},q_auto,f_auto/${uploadedImage.publicId}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    href={downloadUrl}
                     className="btn btn-primary"
                   >
-                    Download Image
+                    Download Transformed Image
                   </a>
                 )}
               </div>
