@@ -69,7 +69,7 @@ export default function VideoCard({ video }: { video: Video }) {
   const downloadUrl = getCldVideoUrl({
     src: video.publicId,
     assetType: "video",
-    flags: "attachment",
+    flags: { attachment: `${video.title}` },
   });
   const shouldPlayPreview = isHovered || showPreview;
 

@@ -1,4 +1,5 @@
 import Link from "next/link";
+
 import {
   ArrowRight,
   Check,
@@ -164,7 +165,7 @@ export default function LandingPage() {
       </section>
 
       <footer className="mx-auto flex max-w-7xl flex-col gap-4 px-5 py-8 text-xs text-base-content/55 sm:flex-row sm:items-center sm:justify-between sm:px-8">
-        <span>© {new Date().getFullYear()} Frameflow</span>
+        <span> Frameflow</span>
         <span>Media tools for creators who make things.</span>
       </footer>
     </main>
