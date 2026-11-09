@@ -13,6 +13,7 @@ import {
   Sparkles,
   Upload,
 } from "lucide-react";
+import ThemeToggle from "@/components/ThemeToggle";
 
 const navigation = [
   { href: "/home", label: "Overview", icon: LayoutDashboard },
@@ -59,7 +60,8 @@ export default function AppLayout({
                 </span>
               </div>
             </div>
-            <div className="flex-none items-center gap-3">
+            <div className="flex flex-none items-center gap-3">
+              <ThemeToggle />
               <div className="hidden text-right sm:block">
                 <p className="max-w-48 truncate text-sm font-medium">
                   {user?.fullName ?? "Your account"}
@@ -99,8 +101,12 @@ export default function AppLayout({
               <Clapperboard className="h-5 w-5" />
             </span>
             <span>
-              <span className="block text-base font-bold tracking-tight">Frameflow</span>
-              <span className="block text-xs text-base-content/45">Creator workspace</span>
+              <span className="block text-base font-bold tracking-tight">
+                Frameflow
+              </span>
+              <span className="block text-xs text-base-content/45">
+                Creator workspace
+              </span>
             </span>
           </Link>
 
@@ -125,7 +131,9 @@ export default function AppLayout({
                 >
                   <Icon className="h-[18px] w-[18px]" />
                   {item.label}
-                  {active && <ArrowUpRight className="ml-auto h-4 w-4 opacity-70" />}
+                  {active && (
+                    <ArrowUpRight className="ml-auto h-4 w-4 opacity-70" />
+                  )}
                 </Link>
               );
             })}
@@ -135,7 +143,9 @@ export default function AppLayout({
             <span className="grid h-9 w-9 place-items-center rounded-xl bg-primary/10 text-primary">
               <Sparkles className="h-4 w-4" />
             </span>
-            <p className="mt-3 text-sm font-semibold">Create more with your media</p>
+            <p className="mt-3 text-sm font-semibold">
+              Create more with your media
+            </p>
             <p className="mt-1 text-xs leading-5 text-base-content/55">
               Turn a single upload into optimized videos and social-ready images.
             </p>

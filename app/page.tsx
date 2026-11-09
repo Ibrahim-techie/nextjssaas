@@ -1,4 +1,5 @@
 import Link from "next/link";
+import ThemeToggle from "@/components/ThemeToggle";
 
 import {
   ArrowRight,
@@ -39,6 +40,7 @@ export default function LandingPage() {
           <span className="text-lg font-bold tracking-tight">Frameflow</span>
         </Link>
         <nav className="flex items-center gap-2 sm:gap-4" aria-label="Account">
+          <ThemeToggle />
           <Link
             href="/sign-in"
             className="rounded-xl px-3 py-2 text-sm font-semibold text-base-content/70 transition hover:text-primary sm:px-4"

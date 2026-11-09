@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
 import { Toaster } from "sonner";
-
+import Providers from "@/app/provider";
 export const metadata: Metadata = {
   title: {
     default: "Frameflow — Your media, ready to share",
@@ -42,9 +42,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         },
       }}
     >
-      <html data-theme="frameflow" lang="en">
+      <html data-theme="frameflow" lang="en" suppressHydrationWarning>
         <body className="min-h-screen bg-base-100 font-sans antialiased">
-          {children}
+         <Providers>{children}</Providers>
           <Toaster theme="light" richColors position="bottom-right" />
         </body>
       </html>

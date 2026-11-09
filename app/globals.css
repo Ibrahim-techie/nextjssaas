@@ -41,9 +41,49 @@
   --noise: 0;
 }
 
+@plugin "daisyui/theme" {
+  name: "frameflow-dark";
+  prefersdark: true;
+  color-scheme: dark;
+
+  --color-base-100: #1d1015;
+  --color-base-200: #140b0f;
+  --color-base-300: #4a2732;
+  --color-base-content: #fcecef;
+
+  --color-primary: #ff6b91;
+  --color-primary-content: #3d0718;
+  --color-secondary: #f58aa8;
+  --color-secondary-content: #3d0718;
+  --color-accent: #ff9db7;
+  --color-accent-content: #3d0718;
+  --color-neutral: #2a171e;
+  --color-neutral-content: #fcecef;
+
+  --color-info: #ff9db7;
+  --color-info-content: #3d0718;
+  --color-success: #e58aa4;
+  --color-success-content: #3d0718;
+  --color-warning: #f8b6bf;
+  --color-warning-content: #3d0718;
+  --color-error: #ff6b91;
+  --color-error-content: #3d0718;
+
+  --radius-selector: 0.75rem;
+  --radius-field: 0.75rem;
+  --radius-box: 1.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
 :root {
   color-scheme: light;
   font-family: Arial, Helvetica, sans-serif;
+}
+
+html[data-theme="frameflow-dark"] {
+  color-scheme: dark;
 }
 
 html {
