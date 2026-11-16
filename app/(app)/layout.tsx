@@ -3,22 +3,15 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { UserButton, useUser } from "@clerk/nextjs";
-import {
-  ArrowUpRight,
-  Clapperboard,
-  Images,
-  LayoutDashboard,
-  Menu,
-  Sparkles,
-  Upload,
-} from "lucide-react";
+import { Crop, Library, Menu, Upload } from "lucide-react";
+import Logo from "@/components/Logo";
 import ThemeToggle from "@/components/ThemeToggle";
+import { ThemedUserButton } from "@/components/ThemedClerk";
 
 const navigation = [
-  { href: "/home", label: "Overview", icon: LayoutDashboard },
+  { href: "/home", label: "Library", icon: Library },
   { href: "/video-upload", label: "Upload video", icon: Upload },
-  { href: "/social-share", label: "Social creator", icon: Images },
+  { href: "/social-share", label: "Social image", icon: Crop },
 ];
 
 export default function AppLayout({
@@ -26,8 +19,8 @@ export default function AppLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
-  const { user } = useUser();
   const activePage = navigation.find((item) => item.href === pathname)?.label;
+  const closeSidebar = () => setSidebarOpen(false);
 
   return (
     <div className="drawer lg:drawer-open">
@@ -38,49 +31,28 @@ export default function AppLayout({
         checked={sidebarOpen}
         onChange={(event) => setSidebarOpen(event.target.checked)}
       />
-      <div className="drawer-content flex min-h-screen flex-col bg-base-200/50">
-        <header className="sticky top-0 z-30 border-b border-base-300/70 bg-base-100/90 backdrop-blur-xl">
-          <div className="navbar mx-auto h-16 max-w-[1600px] px-4 sm:px-6 lg:px-8">
-            <div className="flex-none lg:hidden">
-              <label
-                htmlFor="app-sidebar"
-                aria-label="Open navigation menu"
-                className="btn btn-square btn-ghost rounded-xl"
-              >
-                <Menu className="h-5 w-5" />
-              </label>
-            </div>
-            <div className="flex-1 px-2">
-              <div className="flex flex-col">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-base-content/40">
-                  Workspace
-                </span>
-                <span className="text-sm font-semibold">
-                  {activePage ?? "Media tools"}
-                </span>
-              </div>
-            </div>
-            <div className="flex flex-none items-center gap-3">
-              <ThemeToggle />
-              <div className="hidden text-right sm:block">
-                <p className="max-w-48 truncate text-sm font-medium">
-                  {user?.fullName ?? "Your account"}
-                </p>
-                <p className="text-xs text-base-content/45">Personal workspace</p>
-              </div>
-              <UserButton
-                appearance={{
-                  elements: {
-                    avatarBox: "h-9 w-9",
-                    userButtonTrigger: "rounded-full ring-2 ring-primary/10",
-                  },
-                }}
-              />
+
+      <div className="drawer-content flex min-h-screen flex-col bg-base-200">
+        <header className="sticky top-0 z-30 border-b border-line bg-base-200">
+          <div className="mx-auto flex h-14 w-full max-w-[1440px] items-center gap-2 px-4 sm:px-6 lg:px-8">
+            <label
+              htmlFor="app-sidebar"
+              aria-label="Open navigation"
+              className="-ml-2 grid size-9 cursor-pointer place-items-center rounded-lg text-fg-2 transition-colors hover:bg-base-300 hover:text-base-content lg:hidden"
+            >
+              <Menu className="size-4" strokeWidth={1.5} />
+            </label>
+            <p className="flex-1 truncate text-sm text-fg-2">
+              {activePage ?? "Frameflow"}
+            </p>
+            <ThemeToggle />
+            <div className="grid size-9 place-items-center">
+              <ThemedUserButton />
             </div>
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+        <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-8 sm:px-6 lg:px-8">
           {children}
         </main>
       </div>
@@ -88,32 +60,15 @@ export default function AppLayout({
       <div className="drawer-side z-40">
         <label
           htmlFor="app-sidebar"
-          aria-label="Close navigation menu"
+          aria-label="Close navigation"
           className="drawer-overlay"
         />
-        <aside className="flex min-h-full w-[17rem] flex-col border-r border-base-300/70 bg-base-100 px-4 py-5">
-          <Link
-            href="/home"
-            onClick={() => setSidebarOpen(false)}
-            className="mb-9 flex items-center gap-3 px-2"
-          >
-            <span className="grid h-11 w-11 place-items-center rounded-2xl bg-primary text-primary-content shadow-lg shadow-primary/20">
-              <Clapperboard className="h-5 w-5" />
-            </span>
-            <span>
-              <span className="block text-base font-bold tracking-tight">
-                Frameflow
-              </span>
-              <span className="block text-xs text-base-content/45">
-                Creator workspace
-              </span>
-            </span>
-          </Link>
+        <aside className="flex min-h-full w-64 flex-col border-r border-line bg-base-100 px-3">
+          <div className="flex h-14 items-center px-2">
+            <Logo href="/home" onClick={closeSidebar} />
+          </div>
 
-          <p className="mb-3 px-3 text-[10px] font-bold uppercase tracking-[0.18em] text-base-content/40">
-            Workspace
-          </p>
-          <nav aria-label="Main navigation" className="space-y-1">
+          <nav aria-label="Main navigation" className="mt-4 flex flex-col gap-0.5">
             {navigation.map((item) => {
               const active = pathname === item.href;
               const Icon = item.icon;
@@ -121,42 +76,27 @@ export default function AppLayout({
                 <Link
                   key={item.href}
                   href={item.href}
-                  onClick={() => setSidebarOpen(false)}
+                  onClick={closeSidebar}
                   aria-current={active ? "page" : undefined}
-                  className={`group flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition ${
+                  className={`flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-sm transition-colors ${
                     active
-                      ? "bg-primary text-primary-content shadow-md shadow-primary/15"
-                      : "text-base-content/65 hover:bg-base-200 hover:text-base-content"
+                      ? "bg-base-300 font-medium text-base-content"
+                      : "text-fg-2 hover:bg-base-300/60 hover:text-base-content"
                   }`}
                 >
-                  <Icon className="h-[18px] w-[18px]" />
+                  <Icon
+                    className={`size-4 shrink-0 ${active ? "text-base-content" : "text-fg-3"}`}
+                    strokeWidth={1.5}
+                  />
                   {item.label}
-                  {active && (
-                    <ArrowUpRight className="ml-auto h-4 w-4 opacity-70" />
-                  )}
                 </Link>
               );
             })}
           </nav>
 
-          <div className="mt-auto rounded-2xl border border-primary/10 bg-primary/5 p-4">
-            <span className="grid h-9 w-9 place-items-center rounded-xl bg-primary/10 text-primary">
-              <Sparkles className="h-4 w-4" />
-            </span>
-            <p className="mt-3 text-sm font-semibold">
-              Create more with your media
-            </p>
-            <p className="mt-1 text-xs leading-5 text-base-content/55">
-              Turn a single upload into optimized videos and social-ready images.
-            </p>
-            <Link
-              href="/social-share"
-              onClick={() => setSidebarOpen(false)}
-              className="btn btn-sm btn-primary mt-4 w-full rounded-lg"
-            >
-              Open social creator
-            </Link>
-          </div>
+          <p className="mt-auto px-2.5 py-4 text-xs leading-4 text-fg-3">
+            Videos up to 100 MB, images up to 10 MB
+          </p>
         </aside>
       </div>
     </div>
