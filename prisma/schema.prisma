@@ -18,11 +18,13 @@ model Video {
   description    String
   publicId       String
   originalSize   String
-  compressedSize String
+  /// Null while Cloudinary is still generating the compressed MP4.
+  compressedSize String?
   duration       Float
   userId         String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   @@index([userId, createdAt])
+  @@index([publicId])
 }
