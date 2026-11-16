@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <style>
+    .mark { stroke: #d61f52; }
+    .dot { fill: #d61f52; }
+    @media (prefers-color-scheme: dark) {
+      .mark { stroke: #ff6b91; }
+      .dot { fill: #ff6b91; }
+    }
+  </style>
+  <path
+    class="mark"
+    d="M3.5 11V6a2.5 2.5 0 0 1 2.5-2.5h5M21 3.5h5A2.5 2.5 0 0 1 28.5 6v5M28.5 21v5a2.5 2.5 0 0 1-2.5 2.5h-5M11 28.5H6A2.5 2.5 0 0 1 3.5 26v-5"
+    stroke-width="3"
+    stroke-linecap="round"
+  />
+  <circle class="dot" cx="16" cy="16" r="5.5" />
+</svg>
