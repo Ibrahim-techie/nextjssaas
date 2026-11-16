@@ -1,36 +1,42 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Frameflow
 
-## Getting Started
+Compress videos to a fraction of their size and crop images to the exact dimensions each social channel asks for.
 
-First, run the development server:
+Next.js 16 (App Router), Clerk for auth, Cloudinary for media, Prisma 7 on PostgreSQL, Tailwind 4 with daisyUI.
+
+## How uploads and compression work
+
+1. The browser asks `POST /api/uploads/signature` for a signed, one-off upload. The server picks the public ID (`nextjssaas/videos/<userId>/<uuid>`) and the background renditions.
+2. The browser uploads the file **directly to Cloudinary**. Files never pass through Next.js, which only buffers 10 MB of a request body when `proxy.ts` runs (and Vercel caps function bodies at 4.5 MB).
+3. The browser sends the upload result to `POST /api/video-upload`. The server verifies Cloudinary's response signature, checks the public ID belongs to the user, reads the real size from the Admin API, and saves the record.
+4. Cloudinary builds the compressed MP4 in the background (`eager_async`): H.264 + AAC, longest side 1280 px, `q_auto:eco`, 2 Mbps ceiling. The transformation lives in `lib/cloudinary.ts`.
+5. The compressed size is stored when the rendition is ready, through the webhook at `/api/webhooks/cloudinary` when `APP_URL` is set, and otherwise by the library page checking while it is open.
+
+Preview and download both use the compressed MP4. If a rendition has not appeared after six hours, the video is marked as failed and the original is offered instead.
+
+## Setup
 
 ```bash
+npm install
+cp .env.example .env    # fill in Postgres, Clerk and Cloudinary keys
+npm run db:migrate      # or `npm run db:deploy` against an existing database
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Scripts
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Script | What it does |
+| --- | --- |
+| `npm run dev` | Generate the Prisma client and start the dev server |
+| `npm run build` | Generate the Prisma client and build for production |
+| `npm run lint` / `npm run typecheck` | ESLint / TypeScript |
+| `npm run db:migrate` | Create and apply migrations in development |
+| `npm run db:deploy` | Apply pending migrations (production, CI) |
+| `npm run videos:recompress` | Queue the compressed MP4 for videos that do not have one yet, such as uploads from before background compression. Add `-- --dry` to only report. Each queued video uses Cloudinary transformation quota |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Deploying
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Set every variable from `.env.example` in your host. Use Clerk production keys.
+- Set `APP_URL` to the public HTTPS origin (for example `https://frameflow.example.com`). Cloudinary then reports finished renditions to `/api/webhooks/cloudinary`, which verifies the `X-Cld-Signature` header.
+- Run `npm run db:deploy` before the new version starts serving traffic.
+- Cloudinary's free plan allows videos up to 100 MB and images up to 10 MB, which are the limits in `lib/limits.ts`.
