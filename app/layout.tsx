@@ -27,12 +27,17 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <ClerkProvider appearance={{ variables: clerkLightVariables }}>
+        <ClerkProvider appearance={{ variables: clerkLightVariables,
+          options: {
+            unsafe_disableDevelopmentModeWarnings: true,
+          }
+         }}>
       <html
         data-theme="frameflow"
         lang="en"
         className={`${geistSans.variable} ${geistMono.variable}`}
         suppressHydrationWarning
+        
       >
         <body className="min-h-screen bg-base-200 font-sans text-base-content antialiased">
           <Providers>
