@@ -1,210 +1,352 @@
 "use client";
 
-import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type DragEvent,
+  type FormEvent,
+} from "react";
 import axios from "axios";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeft, CheckCircle2, Film, FileVideo2, Upload, X } from "lucide-react";
-import Link from "next/link";
+import { ArrowLeft, Upload, X } from "lucide-react";
+import { formatBytes } from "@/lib/format";
+import {
+  MAX_DESCRIPTION_LENGTH,
+  MAX_TITLE_LENGTH,
+  MAX_VIDEO_BYTES,
+} from "@/lib/limits";
+import { errorMessage, uploadToCloudinary } from "@/lib/upload";
 
-const MAX_FILE_SIZE = 100 * 1024 * 1024;
+type Phase = "idle" | "uploading" | "saving";
+
+const OUTPUT_SPEC = [
+  ["Format", "MP4, H.264 video, AAC audio"],
+  ["Resolution", "Longest side up to 1280 px"],
+  ["Quality", "Cloudinary eco, 2 Mbps ceiling"],
+  ["Input", "MP4, MOV, WebM, AVI and more"],
+  ["Limit", "100 MB per upload"],
+  ["Visibility", "Only your account"],
+] as const;
+
+function titleFromFile(name: string) {
+  return name
+    .replace(/\.[^.]+$/, "")
+    .replace(/[_-]+/g, " ")
+    .trim()
+    .slice(0, MAX_TITLE_LENGTH);
+}
 
 export default function VideoUploadPage() {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [duration, setDuration] = useState(0);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [isUploading, setIsUploading] = useState(false);
+  const [phase, setPhase] = useState<Phase>("idle");
   const [progress, setProgress] = useState(0);
+  const [dragging, setDragging] = useState(false);
+
+  const previewRef = useRef("");
+
+  const busy = phase !== "idle";
+
+  function replacePreview(file: File | null) {
+    if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+    previewRef.current = file ? URL.createObjectURL(file) : "";
+    setPreviewUrl(previewRef.current);
+  }
+
+  useEffect(
+    () => () => {
+      abortRef.current?.abort();
+      if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+    },
+    [],
+  );
+
+  function selectFile(file: File | undefined) {
+    if (!file) return;
+    if (!file.type.startsWith("video/")) {
+      toast.error("Choose a video file");
+      return;
+    }
+    if (file.size === 0 || file.size > MAX_VIDEO_BYTES) {
+      toast.error(`Videos can be up to 100 MB. This one is ${formatBytes(file.size)}`);
+      return;
+    }
+    setVideoFile(file);
+    replacePreview(file);
+    setDuration(0);
+    if (!title.trim()) setTitle(titleFromFile(file.name));
+  }
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.currentTarget.files?.[0];
-    if (!file) return;
+    selectFile(event.currentTarget.files?.[0]);
+    event.currentTarget.value = "";
+  }
 
-    if (!file.type.startsWith("video/")) {
-      toast.error("Choose a video file to continue.");
-      setVideoFile(null);
-      event.currentTarget.value = "";
-      return;
-    }
-    if (file.size === 0 || file.size > MAX_FILE_SIZE) {
-      toast.error("Videos must be larger than 0 and no more than 100 MB.");
-      setVideoFile(null);
-      event.currentTarget.value = "";
-      return;
-    }
+  function handleDrop(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault();
+    setDragging(false);
+    if (!busy) selectFile(event.dataTransfer.files?.[0]);
+  }
 
-    setVideoFile(file);
+  function removeFile() {
+    setVideoFile(null);
+    replacePreview(null);
+    setDuration(0);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!videoFile) {
-      toast.error("Select a video first.");
+      toast.error("Choose a video first");
       return;
     }
     if (!title.trim() || !description.trim()) {
-      toast.error("Add a title and description for your video.");
+      toast.error("Add a title and a description");
       return;
     }
 
-    const formData = new FormData();
-    formData.append("file", videoFile);
-    formData.append("title", title.trim());
-    formData.append("description", description.trim());
-
-    setIsUploading(true);
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setPhase("uploading");
     setProgress(0);
+
     try {
-      await axios.post("/api/video-upload", formData, {
-        onUploadProgress: (event) => {
-          if (event.total) {
-            setProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)));
-          }
-        },
+      const uploaded = await uploadToCloudinary("video", videoFile, {
+        onProgress: setProgress,
+        signal: controller.signal,
       });
-      toast.success("Video added to your library.");
+
+      setPhase("saving");
+      await axios.post(
+        "/api/video-upload",
+        {
+          publicId: uploaded.public_id,
+          version: uploaded.version,
+          signature: uploaded.signature,
+          duration: uploaded.duration ?? duration,
+          title: title.trim(),
+          description: description.trim(),
+        },
+        { signal: controller.signal },
+      );
+
+      toast.success("Uploaded. The compressed MP4 is on its way");
       router.push("/home");
       router.refresh();
     } catch (error) {
-      const message = axios.isAxiosError<{ error?: string }>(error)
-        ? error.response?.data?.error ?? "The video could not be uploaded."
-        : "The video could not be uploaded.";
-      toast.error(message);
+      if (!axios.isCancel(error)) {
+        toast.error(errorMessage(error, "The video could not be uploaded"));
+      }
+      setPhase("idle");
     } finally {
-      setIsUploading(false);
+      abortRef.current = null;
     }
   }
 
-  function removeFile() {
-    setVideoFile(null);
-    if (inputRef.current) inputRef.current.value = "";
-  }
-
   return (
-    <div className="mx-auto max-w-5xl space-y-7">
-      <Link href="/home" className="inline-flex items-center gap-2 text-sm font-medium text-base-content/55 transition hover:text-base-content">
-        <ArrowLeft className="h-4 w-4" /> Back to library
+    <div className="mx-auto max-w-5xl pb-12">
+      <Link
+        href="/home"
+        className="inline-flex h-8 items-center gap-2 rounded-lg text-sm text-fg-2 transition-colors hover:text-base-content"
+      >
+        <ArrowLeft className="size-4" strokeWidth={1.5} />
+        Library
       </Link>
 
-      <div className="grid overflow-hidden rounded-[2rem] border border-base-300/70 bg-base-100 shadow-sm lg:grid-cols-[0.8fr_1.2fr]">
-        <section className="relative overflow-hidden bg-neutral p-7 text-neutral-content sm:p-9">
-          <div className="absolute -right-20 -top-16 h-64 w-64 rounded-full bg-primary/30 blur-3xl" />
-          <div className="absolute -bottom-20 -left-20 h-64 w-64 rounded-full bg-accent/25 blur-3xl" />
-          <div className="relative flex h-full flex-col">
-            <span className="grid h-12 w-12 place-items-center rounded-2xl border border-neutral-content/20 bg-neutral-content/10 text-accent">
-              <Film className="h-6 w-6" />
-            </span>
-            <p className="mt-8 text-xs font-semibold uppercase tracking-[0.18em] text-accent">
-              Add to your library
-            </p>
-            <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
-              Bring your next story in.
-            </h1>
-            <p className="mt-4 max-w-sm text-sm leading-6 text-neutral-content/70">
-              Upload one video and keep its optimized version, file details, and
-              download together in your private workspace.
-            </p>
-            <div className="mt-auto space-y-3 pt-10 text-sm text-neutral-content/85">
-              <p className="flex items-center gap-2.5"><CheckCircle2 className="h-4 w-4 text-accent" /> Up to 100 MB per upload</p>
-              <p className="flex items-center gap-2.5"><CheckCircle2 className="h-4 w-4 text-accent" /> MP4, MOV, WebM, and more</p>
-              <p className="flex items-center gap-2.5"><CheckCircle2 className="h-4 w-4 text-accent" /> Only visible in your account</p>
-            </div>
-          </div>
-        </section>
+      <div className="enter mt-4 max-w-xl">
+        <h1 className="text-[32px] font-medium leading-tight">Upload video</h1>
+        <p className="mt-2 text-[15px] leading-6 text-fg-2">
+          The file goes straight to storage. A compressed MP4 is made in the
+          background and appears in your library when it is ready
+        </p>
+      </div>
 
-        <section className="p-6 sm:p-9 lg:p-10">
-          <div className="mb-7">
-            <h2 className="text-xl font-semibold tracking-tight">Video details</h2>
-            <p className="mt-1 text-sm text-base-content/55">Add a few details before uploading.</p>
-          </div>
+      <div className="enter-2 mt-8 grid gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,8fr)]">
+        <aside className="h-fit rounded-xl border border-line bg-base-100 p-5">
+          <h2 className="text-sm font-medium">What you get back</h2>
+          <dl className="mt-4 divide-y divide-line">
+            {OUTPUT_SPEC.map(([term, value]) => (
+              <div key={term} className="flex justify-between gap-4 py-3 text-[13px]">
+                <dt className="text-fg-3">{term}</dt>
+                <dd className="text-right text-base-content">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </aside>
 
+        <section className="rounded-xl border border-line bg-base-100 p-5 sm:p-6">
           <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="space-y-2">
-              <label htmlFor="video-file" className="text-sm font-semibold">Video file</label>
+            <div>
+              <p className="text-sm font-medium" id="video-file-label">
+                Video file
+              </p>
               <input
                 ref={inputRef}
                 id="video-file"
                 type="file"
                 accept="video/*"
                 onChange={handleFileChange}
-                disabled={isUploading}
+                disabled={busy}
                 className="sr-only"
+                aria-labelledby="video-file-label"
               />
-              {videoFile ? (
-                <div className="flex items-center gap-3 rounded-2xl border border-primary/20 bg-primary/5 p-4">
-                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
-                    <FileVideo2 className="h-5 w-5" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold">{videoFile.name}</p>
-                    <p className="mt-1 text-xs text-base-content/55">
-                      {(videoFile.size / (1024 * 1024)).toFixed(2)} MB · {videoFile.type || "Video"}
-                    </p>
+
+              {videoFile && previewUrl ? (
+                <div className="mt-2 overflow-hidden rounded-lg border border-line">
+                  <div className="viewfinder aspect-video bg-frame">
+                    <video
+                      src={previewUrl}
+                      muted
+                      playsInline
+                      controls
+                      preload="metadata"
+                      onLoadedMetadata={(event) =>
+                        setDuration(event.currentTarget.duration || 0)
+                      }
+                      className="size-full object-contain"
+                    />
                   </div>
-                  <button type="button" onClick={removeFile} disabled={isUploading} aria-label="Remove selected video" className="btn btn-ghost btn-sm btn-square rounded-lg">
-                    <X className="h-4 w-4" />
-                  </button>
+                  <div className="flex items-center gap-3 px-3 py-2.5">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[13px] font-medium">
+                        {videoFile.name}
+                      </p>
+                      <p className="mt-0.5 font-mono text-xs tabular-nums text-fg-3">
+                        {formatBytes(videoFile.size)}
+                        {videoFile.type ? ` · ${videoFile.type.replace("video/", "")}` : ""}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={removeFile}
+                      disabled={busy}
+                      aria-label="Remove selected video"
+                      className="grid size-8 place-items-center rounded-lg text-fg-2 transition-colors hover:bg-base-300 hover:text-base-content disabled:opacity-50"
+                    >
+                      <X className="size-4" strokeWidth={1.5} />
+                    </button>
+                  </div>
                 </div>
               ) : (
-                <label htmlFor="video-file" className="flex cursor-pointer flex-col items-center rounded-2xl border-2 border-dashed border-base-300 bg-base-200/40 px-5 py-9 text-center transition hover:border-primary/50 hover:bg-primary/5">
-                  <span className="grid h-12 w-12 place-items-center rounded-2xl bg-base-100 text-primary shadow-sm">
-                    <Upload className="h-5 w-5" />
+                <label
+                  htmlFor="video-file"
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    setDragging(true);
+                  }}
+                  onDragLeave={() => setDragging(false)}
+                  onDrop={handleDrop}
+                  className={`mt-2 flex cursor-pointer flex-col items-center rounded-lg border border-dashed px-6 py-10 text-center transition-colors ${
+                    dragging
+                      ? "border-primary bg-primary/5"
+                      : "border-line-strong bg-base-200 hover:bg-base-300/60"
+                  }`}
+                >
+                  <Upload className="size-[18px] text-fg-2" strokeWidth={1.5} />
+                  <span className="mt-3 text-sm font-medium">
+                    Drop a video or choose one
                   </span>
-                  <span className="mt-4 text-sm font-semibold">Choose a video to upload</span>
-                  <span className="mt-1 text-xs text-base-content/50">Click to browse · maximum 100 MB</span>
+                  <span className="mt-1 text-xs text-fg-3">Up to 100 MB</span>
                 </label>
               )}
             </div>
 
             <div className="space-y-2">
-              <label htmlFor="video-title" className="text-sm font-semibold">Title</label>
+              <label htmlFor="video-title" className="block text-sm font-medium">
+                Title
+              </label>
               <input
                 id="video-title"
                 type="text"
-                placeholder="Give your video a clear name"
+                placeholder="Product demo, October"
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
-                maxLength={200}
+                maxLength={MAX_TITLE_LENGTH}
                 required
-                disabled={isUploading}
-                className="input input-bordered h-12 w-full rounded-xl bg-base-100"
+                disabled={busy}
+                className="input h-10 w-full rounded-lg border-line-strong bg-base-100 text-sm"
               />
             </div>
 
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label htmlFor="video-description" className="text-sm font-semibold">Description</label>
-                <span className="text-xs text-base-content/40">{description.length}/2,000</span>
+              <div className="flex items-baseline justify-between">
+                <label htmlFor="video-description" className="text-sm font-medium">
+                  Description
+                </label>
+                <span className="font-mono text-xs tabular-nums text-fg-3">
+                  {description.length.toLocaleString("en-US")}/
+                  {MAX_DESCRIPTION_LENGTH.toLocaleString("en-US")}
+                </span>
               </div>
               <textarea
                 id="video-description"
-                placeholder="Add context or notes about this video"
+                placeholder="Where it was shot, who it is for"
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
-                maxLength={2000}
+                maxLength={MAX_DESCRIPTION_LENGTH}
                 required
-                disabled={isUploading}
-                className="textarea textarea-bordered min-h-28 w-full resize-y rounded-xl bg-base-100"
+                disabled={busy}
+                className="textarea min-h-28 w-full resize-y rounded-lg border-line-strong bg-base-100 text-sm leading-6"
               />
             </div>
 
-            {isUploading && (
-              <div className="space-y-2" aria-live="polite">
-                <div className="flex justify-between text-xs font-medium text-base-content/60">
-                  <span>Uploading your video</span><span>{progress}%</span>
+            {busy && (
+              <div aria-live="polite">
+                <div className="flex justify-between text-xs">
+                  <span className="text-fg-2">
+                    {phase === "uploading" ? "Uploading" : "Saving to your library"}
+                  </span>
+                  <span className="font-mono tabular-nums text-fg-3">{progress}%</span>
                 </div>
-                <progress className="progress progress-primary h-2 w-full" value={progress} max="100" />
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-base-300">
+                  <div
+                    className="h-full rounded-full bg-primary transition-transform duration-300"
+                    style={{
+                      transform: `translateX(-${100 - progress}%)`,
+                    }}
+                  />
+                </div>
               </div>
             )}
 
-            <div className="flex flex-col-reverse gap-3 border-t border-base-200 pt-5 sm:flex-row sm:justify-end">
-              <Link href="/home" className={`btn btn-ghost rounded-xl ${isUploading ? "pointer-events-none opacity-50" : ""}`}>
-                Cancel
-              </Link>
-              <button type="submit" className="btn btn-primary rounded-xl px-6" disabled={isUploading || !videoFile}>
-                {isUploading ? "Uploading…" : "Save to library"}
+            <div className="flex flex-col-reverse gap-2 border-t border-line pt-5 sm:flex-row sm:justify-end">
+              {busy ? (
+                <button
+                  type="button"
+                  onClick={() => abortRef.current?.abort()}
+                  disabled={phase === "saving"}
+                  className="inline-flex h-10 items-center justify-center rounded-lg px-4 text-sm font-medium text-fg-2 transition-colors hover:bg-base-300 hover:text-base-content disabled:opacity-50"
+                >
+                  Cancel upload
+                </button>
+              ) : (
+                <Link
+                  href="/home"
+                  className="inline-flex h-10 items-center justify-center rounded-lg px-4 text-sm font-medium text-fg-2 transition-colors hover:bg-base-300 hover:text-base-content"
+                >
+                  Cancel
+                </Link>
+              )}
+              <button
+                type="submit"
+                disabled={busy || !videoFile}
+                className="inline-flex h-10 items-center justify-center rounded-lg bg-primary px-5 text-sm font-medium text-primary-content transition-[background-color,transform] hover:bg-primary/90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {phase === "uploading"
+                  ? "Uploading"
+                  : phase === "saving"
+                    ? "Saving"
+                    : "Upload and compress"}
               </button>
             </div>
           </form>
