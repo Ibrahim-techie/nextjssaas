@@ -1,22 +1,67 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import Link from "next/link";
-import { ArrowUpRight, HardDrive, Search, Sparkles, Upload, Video as VideoIcon } from "lucide-react";
-import { filesize } from "filesize";
+import { Crop, Search, Upload } from "lucide-react";
 import VideoCard from "@/components/VideoCard";
 import type { Video } from "@/types";
+import { formatBytes, parseStoredBytes, percentSmaller } from "@/lib/format";
+import { errorMessage } from "@/lib/upload";
 
-function storedBytes(value: string): number {
-  const numeric = Number(value);
-  if (Number.isFinite(numeric) && numeric >= 0) return numeric;
-  const match = value.trim().match(/^([\d.]+)\s*(B|KB|MB|GB|TB)$/i);
-  if (!match) return 0;
-  const exponent = ["B", "KB", "MB", "GB", "TB"].indexOf(
-    match[2].toUpperCase(),
+/** While a video is compressing, refresh the list on this interval. */
+const POLL_INTERVAL_MS = 15_000;
+
+async function fetchVideos(): Promise<Video[]> {
+  const response = await axios.get<Video[]>("/api/video");
+  if (!Array.isArray(response.data)) {
+    throw new Error("The video service returned an unexpected response");
+  }
+  return response.data;
+}
+
+function Stat({
+  label,
+  value,
+  detail,
+  accent = false,
+}: {
+  label: string;
+  value: string;
+  detail?: string;
+  accent?: boolean;
+}) {
+  return (
+    <div className="px-5 py-4">
+      <p className="text-[13px] text-fg-2">{label}</p>
+      <p
+        className={`mt-2 text-[28px] font-medium leading-none tabular-nums ${accent ? "text-primary" : ""}`}
+      >
+        {value}
+      </p>
+      {detail && <p className="mt-2 text-xs text-fg-3">{detail}</p>}
+    </div>
   );
-  return Number(match[1]) * 1024 ** exponent;
+}
+
+function LibrarySkeleton() {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+      {[0, 1, 2].map((item) => (
+        <div
+          key={item}
+          className="overflow-hidden rounded-xl border border-line bg-base-100"
+        >
+          <div className="aspect-video bg-base-300" />
+          <div className="space-y-3 p-4">
+            <div className="h-4 w-2/3 rounded bg-base-300" />
+            <div className="h-3 w-full rounded bg-base-300" />
+            <div className="h-1.5 w-full rounded-full bg-base-300" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export default function Home() {
@@ -24,29 +69,18 @@ export default function Home() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
-  const requestVideos = useCallback(async () => {
-    const response = await axios.get<Video[]>("/api/video");
-    if (!Array.isArray(response.data)) {
-      throw new Error("The video service returned an unexpected response.");
-    }
-    return response.data;
-  }, []);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
-    requestVideos()
+    fetchVideos()
       .then((items) => {
         if (!cancelled) setVideos(items);
       })
       .catch((requestError: unknown) => {
-        if (cancelled) return;
-        const message = axios.isAxiosError<{ error?: string }>(requestError)
-          ? requestError.response?.data?.error ?? "Could not load your videos."
-          : requestError instanceof Error
-            ? requestError.message
-            : "Could not load your videos.";
-        setError(message);
+        if (!cancelled) {
+          setError(errorMessage(requestError, "Could not load your videos"));
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -54,22 +88,33 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [requestVideos]);
+  }, [reloadKey]);
 
-  function retryFetch() {
+  const processing = videos.some((video) => video.status === "processing");
+
+  // Quiet refresh while a compressed MP4 is still being made. Failures here
+  // keep the current list on screen and try again on the next tick.
+  useEffect(() => {
+    if (!processing) return;
+    let cancelled = false;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      fetchVideos()
+        .then((items) => {
+          if (!cancelled) setVideos(items);
+        })
+        .catch(() => {});
+    }, POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [processing]);
+
+  function retry() {
     setLoading(true);
     setError("");
-    requestVideos()
-      .then(setVideos)
-      .catch((requestError: unknown) => {
-        const message = axios.isAxiosError<{ error?: string }>(requestError)
-          ? requestError.response?.data?.error ?? "Could not load your videos."
-          : requestError instanceof Error
-            ? requestError.message
-            : "Could not load your videos.";
-        setError(message);
-      })
-      .finally(() => setLoading(false));
+    setReloadKey((key) => key + 1);
   }
 
   const visibleVideos = useMemo(() => {
@@ -82,160 +127,153 @@ export default function Home() {
     );
   }, [search, videos]);
 
-  const totalOriginalBytes = videos.reduce(
-    (total, video) => total + storedBytes(video.originalSize),
-    0,
-  );
-  const totalSavedBytes = videos.reduce(
-    (total, video) =>
-      total +
-      Math.max(
-        0,
-        storedBytes(video.originalSize) - storedBytes(video.compressedSize),
-      ),
-    0,
-  );
+  const totals = useMemo(() => {
+    let uploaded = 0;
+    let compressedFrom = 0;
+    let compressedTo = 0;
+    for (const video of videos) {
+      const original = parseStoredBytes(video.originalSize);
+      uploaded += original;
+      if (video.status === "ready") {
+        compressedFrom += original;
+        compressedTo += Math.min(original, parseStoredBytes(video.compressedSize));
+      }
+    }
+    return {
+      uploaded,
+      saved: compressedFrom - compressedTo,
+      percent: percentSmaller(compressedFrom, compressedTo),
+    };
+  }, [videos]);
+
+  const compressing = videos.filter((video) => video.status === "processing").length;
 
   return (
-    <div className="space-y-9 pb-12">
-      <section className="relative isolate overflow-hidden rounded-[2rem] bg-neutral px-6 py-9 text-neutral-content shadow-xl sm:px-10 sm:py-12">
-        <div className="absolute -right-16 -top-28 -z-10 h-80 w-80 rounded-full bg-primary/40 blur-3xl" />
-        <div className="absolute -bottom-40 left-1/3 -z-10 h-80 w-80 rounded-full bg-accent/25 blur-3xl" />
-        <div className="relative flex flex-col justify-between gap-8 lg:flex-row lg:items-end">
-          <div className="max-w-2xl">
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-neutral-content/20 bg-neutral-content/10 px-3 py-1.5 text-xs font-medium text-neutral-content/85">
-              <Sparkles className="h-3.5 w-3.5 text-accent" />
-              Your media workspace
-            </div>
-            <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-              Make every video ready to share.
-            </h1>
-            <p className="mt-3 max-w-xl text-sm leading-6 text-neutral-content/70 sm:text-base">
-              Keep your uploads organized, see how much space you save, and
-              create polished visuals for every social channel.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Link href="/video-upload" className="btn btn-primary gap-2 rounded-xl">
-              <Upload className="h-4 w-4" />
-              Upload video
-            </Link>
-            <Link
-              href="/social-share"
-              className="btn btn-ghost border border-neutral-content/25 text-neutral-content hover:border-neutral-content/40 hover:bg-neutral-content/10"
-            >
-              Create social image
-              <ArrowUpRight className="h-4 w-4" />
-            </Link>
-          </div>
+    <div className="space-y-10 pb-12">
+      <section className="enter flex flex-col justify-between gap-6 sm:flex-row sm:items-end">
+        <div className="max-w-xl">
+          <h1 className="text-[32px] font-medium leading-tight">Library</h1>
+          <p className="mt-2 text-[15px] leading-6 text-fg-2">
+            Every upload is kept with a compressed MP4 next to it, ready to
+            download or post
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/video-upload"
+            className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-content transition-[background-color,transform] hover:bg-primary/90 active:scale-[0.98]"
+          >
+            <Upload className="size-4" strokeWidth={1.5} />
+            Upload video
+          </Link>
+          <Link
+            href="/social-share"
+            className="inline-flex h-10 items-center gap-2 rounded-lg border border-line-strong bg-base-100 px-4 text-sm font-medium transition-colors hover:bg-base-300"
+          >
+            <Crop className="size-4 text-fg-2" strokeWidth={1.5} />
+            Social image
+          </Link>
         </div>
       </section>
 
-      <section className="grid gap-4 sm:grid-cols-3">
-        <div className="rounded-2xl border border-base-300/70 bg-base-100 p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-medium text-base-content/60">Your videos</p>
-            <span className="grid h-10 w-10 place-items-center rounded-xl bg-primary/10 text-primary">
-              <VideoIcon className="h-5 w-5" />
-            </span>
-          </div>
-          <p className="mt-4 text-3xl font-semibold tracking-tight">
-            {loading ? "—" : videos.length}
-          </p>
-          <p className="mt-1 text-xs text-base-content/45">In your library</p>
-        </div>
-        <div className="rounded-2xl border border-base-300/70 bg-base-100 p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-medium text-base-content/60">Original media</p>
-            <span className="grid h-10 w-10 place-items-center rounded-xl bg-secondary/10 text-secondary">
-              <HardDrive className="h-5 w-5" />
-            </span>
-          </div>
-          <p className="mt-4 text-3xl font-semibold tracking-tight">
-            {loading ? "—" : filesize(totalOriginalBytes)}
-          </p>
-          <p className="mt-1 text-xs text-base-content/45">Across your library</p>
-        </div>
-        <div className="rounded-2xl border border-base-300/70 bg-base-100 p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-medium text-base-content/60">Space saved</p>
-            <span className="grid h-10 w-10 place-items-center rounded-xl bg-accent/20 text-secondary">
-              <Sparkles className="h-5 w-5" />
-            </span>
-          </div>
-          <p className="mt-4 text-3xl font-semibold tracking-tight">
-            {loading ? "—" : filesize(totalSavedBytes)}
-          </p>
-          <p className="mt-1 text-xs text-base-content/45">Compared with original uploads</p>
-        </div>
+      <section
+        aria-label="Library totals"
+        className="enter-2 grid divide-y divide-line rounded-xl border border-line bg-base-100 sm:grid-cols-3 sm:divide-x sm:divide-y-0"
+      >
+        <Stat
+          label="Videos"
+          value={loading ? "–" : String(videos.length)}
+          detail={compressing > 0 ? `${compressing} compressing now` : undefined}
+        />
+        <Stat
+          label="Uploaded"
+          value={loading ? "–" : formatBytes(totals.uploaded)}
+          detail="Original files"
+        />
+        <Stat
+          label="Saved by compression"
+          value={loading ? "–" : formatBytes(totals.saved)}
+          detail={
+            totals.percent > 0
+              ? `${totals.percent}% smaller than the originals`
+              : "Appears once a video is compressed"
+          }
+          accent={totals.saved > 0}
+        />
       </section>
 
-      <section className="space-y-5">
-        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-          <div>
-            <h2 className="text-2xl font-semibold tracking-tight">Video library</h2>
-            <p className="mt-1 text-sm text-base-content/55">
-              Your uploaded videos, thumbnails, and optimized downloads.
-            </p>
-          </div>
-          <label className="input input-bordered flex w-full items-center gap-2 rounded-xl bg-base-100 sm:max-w-xs">
-            <Search className="h-4 w-4 text-base-content/40" />
+      <section className="enter-3 space-y-4">
+        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+          <h2 className="flex items-baseline gap-2 text-lg font-medium">
+            Videos
+            {!loading && videos.length > 0 && (
+              <span className="font-mono text-xs tabular-nums text-fg-3">
+                {visibleVideos.length === videos.length
+                  ? videos.length
+                  : `${visibleVideos.length} of ${videos.length}`}
+              </span>
+            )}
+          </h2>
+          <label className="flex h-9 w-full items-center gap-2 rounded-lg border border-line-strong bg-base-100 px-3 transition-colors focus-within:border-primary sm:max-w-64">
+            <Search className="size-4 shrink-0 text-fg-3" strokeWidth={1.5} />
             <input
               type="search"
               aria-label="Search videos"
-              placeholder="Search your videos"
+              placeholder="Search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              className="grow"
+              className="h-full w-full bg-transparent text-sm outline-none placeholder:text-fg-3"
             />
           </label>
         </div>
 
         {error ? (
-          <div className="rounded-2xl border border-error/20 bg-error/5 p-6 text-center">
-            <p className="font-medium text-error">{error}</p>
-            <button type="button" className="btn btn-outline btn-sm mt-4" onClick={retryFetch}>
+          <div className="rounded-xl border border-line bg-base-100 px-6 py-10 text-center">
+            <p className="text-sm text-error">{error}</p>
+            <button
+              type="button"
+              onClick={retry}
+              className="mt-4 inline-flex h-8 items-center rounded-lg border border-line-strong px-3 text-[13px] font-medium transition-colors hover:bg-base-300"
+            >
               Try again
             </button>
           </div>
         ) : loading ? (
-          <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-            {[0, 1, 2].map((item) => (
-              <div key={item} className="overflow-hidden rounded-3xl border border-base-300 bg-base-100">
-                <div className="skeleton aspect-video rounded-none" />
-                <div className="space-y-3 p-5">
-                  <div className="skeleton h-5 w-2/3" />
-                  <div className="skeleton h-4 w-full" />
-                  <div className="skeleton h-10 w-full" />
-                </div>
-              </div>
-            ))}
-          </div>
+          <LibrarySkeleton />
         ) : visibleVideos.length > 0 ? (
-          <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
             {visibleVideos.map((video) => (
               <VideoCard key={video.id} video={video} />
             ))}
           </div>
         ) : videos.length > 0 ? (
-          <div className="rounded-3xl border border-dashed border-base-300 bg-base-100 px-6 py-14 text-center">
-            <Search className="mx-auto h-8 w-8 text-base-content/30" />
-            <h3 className="mt-4 font-semibold">No matching videos</h3>
-            <p className="mt-1 text-sm text-base-content/55">Try another title or description.</p>
+          <div className="rounded-xl border border-line bg-base-100 px-6 py-12 text-center">
+            <p className="text-sm font-medium">No videos match “{search.trim()}”</p>
+            <p className="mt-1 text-[13px] text-fg-2">
+              Search looks at titles and descriptions
+            </p>
           </div>
         ) : (
-          <div className="rounded-3xl border border-dashed border-base-300 bg-base-100 px-6 py-16 text-center">
-            <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-primary/10 text-primary">
-              <VideoIcon className="h-7 w-7" />
-            </span>
-            <h3 className="mt-5 text-lg font-semibold">Your library is ready</h3>
-            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-base-content/55">
-              Upload your first clip to see its thumbnail, file size, and optimized download here.
-            </p>
-            <Link href="/video-upload" className="btn btn-primary mt-6 gap-2 rounded-xl">
-              <Upload className="h-4 w-4" />
-              Upload your first video
-            </Link>
+          <div className="grid gap-8 rounded-xl border border-line bg-base-100 p-6 sm:grid-cols-[minmax(0,320px)_1fr] sm:items-center sm:p-8">
+            <div
+              className="viewfinder aspect-video rounded-lg bg-frame"
+              style={{ "--vf-color": "rgb(255 255 255 / 0.35)" } as React.CSSProperties}
+              aria-hidden="true"
+            />
+            <div className="max-w-md">
+              <h3 className="text-lg font-medium">No videos yet</h3>
+              <p className="mt-2 text-sm leading-6 text-fg-2">
+                Upload a clip up to 100 MB. Frameflow keeps the original and
+                makes an H.264 MP4 at a fraction of the size in the background.
+              </p>
+              <Link
+                href="/video-upload"
+                className="mt-5 inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-content transition-[background-color,transform] hover:bg-primary/90 active:scale-[0.98]"
+              >
+                <Upload className="size-4" strokeWidth={1.5} />
+                Upload your first video
+              </Link>
+            </div>
           </div>
         )}
       </section>

@@ -1,195 +1,192 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
-import { getCldImageUrl, getCldVideoUrl } from "next-cloudinary";
-import {
-  ArrowDownToLine,
-  CheckCircle2,
-  Clock3,
-  Play,
-  Video as VideoIcon,
-} from "lucide-react";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
-import { filesize } from "filesize";
+import { ArrowDownToLine, Play } from "lucide-react";
 import type { Video } from "@/types";
+import {
+  formatBytes,
+  formatDuration,
+  parseStoredBytes,
+  percentSmaller,
+} from "@/lib/format";
+import { downloadFile, safeFilename } from "@/lib/upload";
 
 dayjs.extend(relativeTime);
 
-function parseStoredBytes(value: string): number {
-  const numeric = Number(value);
-  if (Number.isFinite(numeric) && numeric >= 0) return numeric;
+function SizeReadout({ video }: { video: Video }) {
+  const original = parseStoredBytes(video.originalSize);
+  const compressed = parseStoredBytes(video.compressedSize);
 
-  const match = value.trim().match(/^([\d.]+)\s*(B|KB|MB|GB|TB)$/i);
-  if (!match) return 0;
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  const exponent = units.indexOf(match[2].toUpperCase());
-  return Number(match[1]) * 1024 ** exponent;
-}
+  if (video.status === "processing") {
+    return (
+      <div>
+        <div className="flex items-baseline justify-between gap-3 text-xs">
+          <span className="text-fg-2">Compressing</span>
+          <span className="font-mono tabular-nums text-fg-3">
+            {formatBytes(original)}
+          </span>
+        </div>
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-base-300">
+          <div className="h-full w-full animate-pulse rounded-full bg-fg-3/30" />
+        </div>
+      </div>
+    );
+  }
 
-function formatDuration(seconds: number): string {
-  const safeSeconds = Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
-  const minutes = Math.floor(safeSeconds / 60);
-  const remainingSeconds = Math.floor(safeSeconds % 60);
-  return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
+  if (video.status === "failed") {
+    return (
+      <div className="flex items-baseline justify-between gap-3 text-xs">
+        <span className="text-fg-2">Original kept, compression did not finish</span>
+        <span className="font-mono tabular-nums text-fg-3">
+          {formatBytes(original)}
+        </span>
+      </div>
+    );
+  }
+
+  const saved = percentSmaller(original, compressed);
+  const share = original > 0 ? Math.min(100, (compressed / original) * 100) : 100;
+
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="font-mono text-xs tabular-nums text-fg-2">
+          {formatBytes(original)}
+          <span className="px-1.5 text-fg-3">→</span>
+          <span className="text-base-content">{formatBytes(compressed)}</span>
+        </p>
+        <p className="text-xs font-medium tabular-nums text-primary">
+          {saved > 0 ? `${saved}% smaller` : "Already compact"}
+        </p>
+      </div>
+      <div
+        className="mt-2 h-1.5 overflow-hidden rounded-full bg-base-300"
+        role="img"
+        aria-label={`Compressed file is ${Math.round(share)}% of the original size`}
+      >
+        <div
+          className="h-full rounded-full bg-primary"
+          style={{ width: `${Math.max(share, 2)}%` }}
+        />
+      </div>
+    </div>
+  );
 }
 
 export default function VideoCard({ video }: { video: Video }) {
-  const [showPreview, setShowPreview] = useState(false);
-  const originalBytes = parseStoredBytes(video.originalSize);
-  const compressedBytes = parseStoredBytes(video.compressedSize);
-  const savedBytes = Math.max(0, originalBytes - compressedBytes);
-  const savedPercent = originalBytes
-    ? Math.round((savedBytes / originalBytes) * 100)
-    : 0;
+  const [hovered, setHovered] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const [posterFailed, setPosterFailed] = useState(false);
+  const [previewFailed, setPreviewFailed] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
-  const [isHovered, setIsHovered] = useState(false);
-  const thumbnailUrl = getCldImageUrl({
-    src: video.publicId,
-    assetType: "video",
-    width: 640,
-    height: 360,
-    crop: "fill",
-    gravity: "auto",
-    quality: "auto",
-    format: "jpg",
-  });
+  const ready = video.status === "ready";
+  const canPreview = ready && !previewFailed;
+  const showVideo = canPreview && (hovered || playing);
 
-  const previewUrl = getCldVideoUrl({
-    src: video.publicId,
-    assetType: "video",
-    width: 1280,
-    height: 720,
-    crop: "limit",
-    quality: "auto",
-    format: "auto",
-  });
-
-  const downloadUrl = getCldVideoUrl({
-    src: video.publicId,
-    assetType: "video",
-    flags: { attachment: `${video.title}` },
-  });
-  const shouldPlayPreview = isHovered || showPreview;
+  async function handleDownload() {
+    setDownloading(true);
+    try {
+      await downloadFile(
+        ready ? video.compressedUrl : video.originalUrl,
+        safeFilename(video.title),
+      );
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   return (
-    <article className="overflow-hidden rounded-3xl border border-base-300/70 bg-base-100 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-xl">
+    <article className="flex flex-col overflow-hidden rounded-xl border border-line bg-base-100 transition-colors hover:border-line-strong">
       <div
-        className="group relative aspect-video overflow-hidden bg-neutral"
-        onMouseEnter={() => setIsHovered(true)}
+        className="viewfinder relative aspect-video overflow-hidden bg-frame"
+        onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => {
-          setIsHovered(false);
-          setShowPreview(false);
+          setHovered(false);
+          setPlaying(false);
         }}
       >
-        {shouldPlayPreview ? (
+        {showVideo ? (
           <video
-            src={previewUrl}
-            poster={thumbnailUrl}
+            src={video.compressedUrl}
+            poster={posterFailed ? undefined : video.posterUrl}
             preload="metadata"
             autoPlay
             loop
-            muted
+            muted={!playing}
             playsInline
-            controls={showPreview}
-            className="h-full w-full object-contain"
+            controls={playing}
+            className="size-full object-contain"
             onError={() => {
-              setShowPreview(false);
-              setIsHovered(false);
+              setPreviewFailed(true);
+              setPlaying(false);
             }}
           />
         ) : (
           <>
-            <Image
-              src={thumbnailUrl}
-              alt={`${video.title} thumbnail`}
-              width={640}
-              height={360}
-              unoptimized
-              className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPreview(true)}
-              aria-label={`Preview ${video.title}`}
-              className="absolute inset-0 grid place-items-center bg-neutral/15 transition hover:bg-neutral/30"
-            >
-              <span className="grid h-14 w-14 place-items-center rounded-full border border-neutral-content/30 bg-base-100/95 text-neutral shadow-lg transition group-hover:scale-105">
-                <Play className="ml-1 h-5 w-5 fill-current" />
-              </span>
-            </button>
+            {!posterFailed && (
+              // Cloudinary already serves an optimized poster.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={video.posterUrl}
+                alt=""
+                loading="lazy"
+                className="size-full object-cover"
+                onError={() => setPosterFailed(true)}
+              />
+            )}
+            {canPreview && (
+              <button
+                type="button"
+                onClick={() => setPlaying(true)}
+                aria-label={`Play ${video.title}`}
+                className="absolute inset-0 z-[2] grid place-items-center"
+              >
+                <span className="grid size-11 place-items-center rounded-full border border-white/20 bg-black/50 text-white transition-colors hover:bg-black/70">
+                  <Play className="ml-0.5 size-4 fill-current" strokeWidth={1.5} />
+                </span>
+              </button>
+            )}
           </>
         )}
-        <span className="absolute bottom-3 right-3 flex items-center gap-1.5 rounded-lg bg-neutral/80 px-2.5 py-1.5 text-xs font-medium text-neutral-content backdrop-blur">
-          <Clock3 className="h-3.5 w-3.5" />
+
+        <span className="pointer-events-none absolute bottom-4 right-7 z-[2] rounded bg-black/60 px-1.5 py-0.5 font-mono text-xs tabular-nums text-white">
           {formatDuration(video.duration)}
         </span>
       </div>
 
-      <div className="space-y-5 p-5">
+      <div className="flex flex-1 flex-col gap-4 p-4">
         <div className="min-w-0">
-          <div className="mb-2 flex items-start justify-between gap-3">
-            <h2 className="line-clamp-1 text-lg font-semibold tracking-tight">
-              {video.title}
-            </h2>
-            <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
-              VIDEO
-            </span>
-          </div>
-          <p className="line-clamp-2 min-h-10 text-sm leading-5 text-base-content/60">
-            {video.description || "No description provided."}
+          <h3 className="truncate text-[15px] font-medium leading-5">
+            {video.title}
+          </h3>
+          <p className="mt-1 line-clamp-2 min-h-10 text-[13px] leading-5 text-fg-2">
+            {video.description}
           </p>
-          <p className="mt-3 text-xs text-base-content/45">
+        </div>
+
+        <SizeReadout video={video} />
+
+        <div className="mt-auto flex items-center justify-between gap-3 border-t border-line pt-3">
+          <time
+            dateTime={video.createdAt}
+            className="text-xs text-fg-3"
+            title={dayjs(video.createdAt).format("D MMM YYYY, HH:mm")}
+          >
             Added {dayjs(video.createdAt).fromNow()}
-          </p>
-        </div>
-
-        <div className="grid grid-cols-2 divide-x divide-base-300 rounded-2xl bg-base-200/70 py-3">
-          <div className="px-3">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-base-content/45">
-              Original
-            </p>
-            <p className="mt-1 text-sm font-semibold">
-              {filesize(originalBytes)}
-            </p>
-          </div>
-          <div className="px-3">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-base-content/45">
-              Optimized
-            </p>
-            <p className="mt-1 text-sm font-semibold">
-              {filesize(compressedBytes)}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2 text-sm">
-            {savedPercent > 0 ? (
-              <>
-                <CheckCircle2 className="h-4 w-4 shrink-0 text-success" />
-                <span className="truncate font-medium text-success">
-                  {savedPercent}% smaller
-                </span>
-              </>
-            ) : (
-              <>
-                <VideoIcon className="h-4 w-4 shrink-0 text-base-content/50" />
-                <span className="truncate text-base-content/60">
-                  Ready to share
-                </span>
-              </>
-            )}
-          </div>
-          <a
-            href={downloadUrl}
-            className="btn btn-primary btn-sm shrink-0 gap-2 rounded-xl"
+          </time>
+          <button
+            type="button"
+            onClick={handleDownload}
+            disabled={downloading || video.status === "processing"}
+            className="inline-flex h-8 items-center gap-2 rounded-lg border border-line-strong bg-base-100 px-3 text-[13px] font-medium transition-colors hover:bg-base-300 disabled:cursor-not-allowed disabled:opacity-50"
             aria-label={`Download ${video.title}`}
           >
-            <ArrowDownToLine className="h-4 w-4" />
-            Download
-          </a>
+            <ArrowDownToLine className="size-4 text-fg-2" strokeWidth={1.5} />
+            {downloading ? "Downloading" : ready ? "Download MP4" : "Download"}
+          </button>
         </div>
       </div>
     </article>
