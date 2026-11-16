@@ -1,8 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import Image from "next/image";
+import { useState, type ChangeEvent } from "react";
 import { getCldImageUrl } from "next-cloudinary";
+import { ArrowDownToLine, ImageUp } from "lucide-react";
+import { formatBytes } from "@/lib/format";
+import { MAX_IMAGE_BYTES } from "@/lib/limits";
+import { errorMessage, uploadToCloudinary } from "@/lib/upload";
 
 type SocialFormatKey =
   | "instagram"
@@ -15,121 +18,138 @@ type SocialFormat = {
   name: string;
   width: number;
   height: number;
+  ratio: string;
 };
 
 type UploadedAsset = {
   publicId: string;
-  url: string;
   width: number;
   height: number;
   format: string;
+  bytes: number;
 };
 
 const socialFormats: Record<SocialFormatKey, SocialFormat> = {
   instagram: {
-    name: "Instagram Post",
+    name: "Instagram post",
     width: 1080,
     height: 1080,
+    ratio: "1:1",
   },
   instagramStory: {
-    name: "Instagram Story",
+    name: "Instagram story",
     width: 1080,
     height: 1920,
+    ratio: "9:16",
   },
   facebook: {
-    name: "Facebook Post",
+    name: "Facebook post",
     width: 1200,
     height: 630,
+    ratio: "1.91:1",
   },
   youtube: {
-    name: "YouTube Thumbnail",
+    name: "YouTube thumbnail",
     width: 1280,
     height: 720,
+    ratio: "16:9",
   },
   linkedin: {
-    name: "LinkedIn Post",
+    name: "LinkedIn post",
     width: 1200,
     height: 627,
+    ratio: "1.91:1",
   },
 };
 
+const ALLOWED_TYPES = [
+  "image/avif",
+  "image/gif",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+];
+
 const MAX_PREVIEW_DIMENSION = 1600;
+
+/** A frame drawn at the format's real aspect ratio, fitted into a 40px box. */
+function RatioFrame({ width, height }: { width: number; height: number }) {
+  const scale = 40 / Math.max(width, height);
+  return (
+    <span
+      className="grid size-10 shrink-0 place-items-center"
+      aria-hidden="true"
+    >
+      <span
+        className="rounded-[3px] border-[1.5px] border-current"
+        style={{
+          width: Math.round(width * scale),
+          height: Math.round(height * scale),
+        }}
+      />
+    </span>
+  );
+}
 
 export default function SocialMediaCreator() {
   const [uploadedImage, setUploadedImage] = useState<UploadedAsset | null>(
     null,
   );
-
   const [selectedFormat, setSelectedFormat] = useState<SocialFormatKey | "">(
     "",
   );
   const [isTransforming, setIsTransforming] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
+  const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState("");
 
-  // Upload image through your API endpoint
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const isUploading = progress !== null;
 
+  async function handleFileUpload(event: ChangeEvent<HTMLInputElement>) {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
     if (!file) return;
-
     setError("");
 
-    const allowedTypes = [
-      "image/avif",
-      "image/gif",
-      "image/jpeg",
-      "image/png",
-      "image/webp",
-    ];
-
-    if (!allowedTypes.includes(file.type)) {
-      setError("Please upload a JPEG, PNG, WebP, GIF, or AVIF image.");
-      e.target.value = "";
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      setError("Use a JPEG, PNG, WebP, GIF or AVIF image");
+      input.value = "";
       return;
     }
-
-    if (file.size === 0 || file.size > 10 * 1024 * 1024) {
-      setError("Maximum file size allowed is 10 MB.");
-      e.target.value = "";
+    if (file.size === 0 || file.size > MAX_IMAGE_BYTES) {
+      setError(
+        `Images can be up to 10 MB. This one is ${formatBytes(file.size)}`,
+      );
+      input.value = "";
       return;
     }
 
     try {
-      setIsUploading(true);
-
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const response = await fetch("/api/image-upload", {
-        method: "POST",
-        body: formData,
+      setProgress(0);
+      const uploaded = await uploadToCloudinary("image", file, {
+        onProgress: setProgress,
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error ?? "Image upload failed.");
-      }
-
-      if (!data.publicId || !data.url) {
-        throw new Error("Invalid response from upload API.");
-      }
-
-      setUploadedImage(data as UploadedAsset);
+      setUploadedImage({
+        publicId: uploaded.public_id,
+        width: uploaded.width,
+        height: uploaded.height,
+        format: uploaded.format,
+        bytes: uploaded.bytes,
+      });
       setSelectedFormat("");
       setIsTransforming(false);
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Something went wrong during upload.",
-      );
+    } catch (uploadError) {
+      setError(errorMessage(uploadError, "The image could not be uploaded"));
     } finally {
-      setIsUploading(false);
-      e.target.value = "";
+      setProgress(null);
+      input.value = "";
     }
-  };
+  }
+
+  function chooseFormat(key: SocialFormatKey) {
+    if (key === selectedFormat) return;
+    setSelectedFormat(key);
+    setIsTransforming(true);
+  }
 
   const currentFormat = selectedFormat ? socialFormats[selectedFormat] : null;
   const previewScale = uploadedImage
@@ -156,194 +176,242 @@ export default function SocialMediaCreator() {
         format: "auto",
       })
     : "";
-  const downloadUrl = uploadedImage && currentFormat
-    ? getCldImageUrl({
-        src: uploadedImage.publicId,
-        width: currentFormat.width,
-        height: currentFormat.height,
-        crop: "fill",
-        gravity: "auto",
-        quality: "auto",
-        format: "auto",
-        flags: "attachment",
-      })
-    : "";
+  const downloadUrl =
+    uploadedImage && currentFormat
+      ? getCldImageUrl({
+          src: uploadedImage.publicId,
+          width: currentFormat.width,
+          height: currentFormat.height,
+          crop: "fill",
+          gravity: "auto",
+          quality: "auto",
+          format: "jpg",
+          flags: "attachment",
+        })
+      : "";
 
   return (
-    <main className="mx-auto max-w-6xl space-y-8 pb-12">
-      <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Image studio</p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Social media creator</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-base-content/55">
-            Turn one image into a ready-to-publish crop for your next post, story, or thumbnail.
+    <div className="mx-auto max-w-6xl space-y-8 pb-12">
+      <header className="enter flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+        <div className="max-w-xl">
+          <h1 className="text-[32px] font-medium leading-tight">
+            Social image
+          </h1>
+          <p className="mt-2 text-[15px] leading-6 text-fg-2">
+            Upload one image and crop it to the exact size a post, story or
+            thumbnail needs. The crop follows the subject of the photo
           </p>
         </div>
-        <div className="hidden rounded-xl border border-base-300/70 bg-base-100 px-4 py-3 text-right sm:block">
-          <p className="text-xs font-medium text-base-content/45">SUPPORTED FORMATS</p>
-          <p className="mt-1 text-sm font-semibold">Up to 10 MB · JPEG, PNG, WebP, GIF, AVIF</p>
-        </div>
+        <p className="text-xs text-fg-3">
+          JPEG, PNG, WebP, GIF or AVIF · up to 10 MB
+        </p>
       </header>
 
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-        {/* Upload Section */}
-        <section className="rounded-3xl border border-base-300/70 bg-base-100 p-5 shadow-sm sm:p-6">
-          <div>
-            <div className="flex items-center gap-3">
-              <span className="grid h-10 w-10 place-items-center rounded-xl bg-primary/10 text-primary">01</span>
-              <div>
-                <h2 className="font-semibold tracking-tight">Add your image</h2>
-                <p className="text-xs text-base-content/50">Start with a photo or graphic.</p>
-              </div>
-            </div>
+      <div className="enter-2 grid grid-cols-1 gap-4 md:grid-cols-2">
+        <section className="rounded-xl border border-line bg-base-100 p-5">
+          <h2 className="flex items-baseline gap-2 text-sm font-medium">
+            <span className="font-mono text-xs text-fg-3">1</span>
+            Image
+          </h2>
 
-            <label className="mt-5 flex min-h-40 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-base-300 bg-base-200/40 p-6 text-center transition hover:border-primary/50 hover:bg-primary/5">
-              <span className="grid h-12 w-12 place-items-center rounded-2xl bg-base-100 text-2xl shadow-sm">📁</span>
+          <label
+            className={`mt-4 flex min-h-40 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-line-strong bg-base-200 p-6 text-center transition-colors hover:bg-base-300/60 ${
+              isUploading ? "pointer-events-none" : ""
+            }`}
+          >
+            <ImageUp className="size-[18px] text-fg-2" strokeWidth={1.5} />
+            <span className="mt-3 text-sm font-medium">
+              {isUploading
+                ? `Uploading ${progress}%`
+                : uploadedImage
+                  ? "Choose another image"
+                  : "Choose an image"}
+            </span>
+            <span className="mt-1 text-xs text-fg-3">Up to 10 MB</span>
+            <input
+              type="file"
+              accept={ALLOWED_TYPES.join(",")}
+              onChange={handleFileUpload}
+              disabled={isUploading}
+              className="sr-only"
+            />
+          </label>
 
-              <span className="mt-3 text-sm font-semibold">
-                {isUploading
-                  ? "Uploading image..."
-                  : uploadedImage ? "Choose another image" : "Click to upload an image"}
-              </span>
-
-              <span className="mt-1 text-xs text-base-content/50">
-                JPEG, PNG, WebP, GIF, AVIF · Maximum 10 MB
-              </span>
-
-              <input
-                type="file"
-                accept="image/avif,image/gif,image/jpeg,image/png,image/webp"
-                onChange={handleFileUpload}
-                disabled={isUploading}
-                className="hidden"
+          {isUploading && (
+            <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-base-300">
+              <div
+                className="h-full rounded-full bg-primary transition-transform duration-300"
+                style={{ transform: `translateX(-${100 - (progress ?? 0)}%)` }}
               />
-            </label>
-
-            {isUploading && (
-              <progress aria-label="Uploading image" className="progress progress-primary mt-4 w-full" />
-            )}
-
-            {error && <p role="alert" className="mt-3 rounded-xl bg-error/10 px-3 py-2 text-sm text-error">{error}</p>}
-
-            {uploadedImage && (
-              <div className="mt-4 rounded-xl border border-base-300/70 bg-base-200/50 p-3">
-                <p className="truncate text-sm font-medium">Current image</p>
-                <p className="mt-1 text-xs text-base-content/50">{uploadedImage.width} × {uploadedImage.height} px · {uploadedImage.format.toUpperCase()}</p>
-              </div>
-            )}
-            <div className="mt-4 flex flex-wrap gap-2 text-xs text-base-content/50">
-              <span className="rounded-full bg-base-200 px-2.5 py-1.5">Automatic crop</span>
-              <span className="rounded-full bg-base-200 px-2.5 py-1.5">High-resolution download</span>
             </div>
-          </div>
+          )}
+
+          {error && (
+            <p role="alert" className="mt-4 text-sm text-error">
+              {error}
+            </p>
+          )}
+
+          {uploadedImage && !isUploading && (
+            <dl className="mt-4 flex flex-wrap gap-x-6 gap-y-1 font-mono text-xs tabular-nums text-fg-2">
+              <div className="flex gap-2">
+                <dt className="text-fg-3">Size</dt>
+                <dd>
+                  {uploadedImage.width} × {uploadedImage.height}
+                </dd>
+              </div>
+              <div className="flex gap-2">
+                <dt className="text-fg-3">Type</dt>
+                <dd>{uploadedImage.format.toUpperCase()}</dd>
+              </div>
+              <div className="flex gap-2">
+                <dt className="text-fg-3">File</dt>
+                <dd>{formatBytes(uploadedImage.bytes)}</dd>
+              </div>
+            </dl>
+          )}
         </section>
 
-        {/* Format Selection */}
-        <section className="rounded-3xl border border-base-300/70 bg-base-100 p-5 shadow-sm sm:p-6">
-          <div>
-            <div className="flex items-center gap-3">
-              <span className="grid h-10 w-10 place-items-center rounded-xl bg-secondary/10 text-secondary">02</span>
-              <div>
-                <h2 className="font-semibold tracking-tight">Choose a destination</h2>
-                <p className="text-xs text-base-content/50">We’ll crop and resize it for you.</p>
-              </div>
-            </div>
+        <section className="rounded-xl border border-line bg-base-100 p-5">
+          <h2 className="flex items-baseline gap-2 text-sm font-medium">
+            <span className="font-mono text-xs text-fg-3">2</span>
+            Format
+          </h2>
 
-            <select
-              className="select select-bordered mt-5 h-12 w-full rounded-xl bg-base-100"
-              value={selectedFormat}
-              onChange={(e) => {
-                setSelectedFormat(e.target.value as SocialFormatKey | "");
-                setIsTransforming(true);
-              }}
-              disabled={!uploadedImage || isUploading}
-            >
-              <option value="" disabled>
-                Select a social media format
-              </option>
-
-              {Object.entries(socialFormats).map(([key, format]) => (
-                <option key={key} value={key}>
-                  {format.name}
-                </option>
-              ))}
-            </select>
-
-            <div className="mt-4 min-h-24 rounded-2xl bg-base-200/60 p-4">
-              {currentFormat ? (
-                <>
-                  <p className="text-sm font-semibold">{currentFormat.name}</p>
-                  <p className="mt-1 text-sm text-base-content/55">{currentFormat.width} × {currentFormat.height} pixels</p>
-                  <p className="mt-2 text-xs text-base-content/45">Preview is optimized for fast loading. Downloads keep this full size.</p>
-                </>
-              ) : (
-                <p className="pt-2 text-sm text-base-content/45">Select an image first, then choose a social format.</p>
-              )}
-            </div>
+          <div
+            role="group"
+            aria-label="Social media format"
+            className="mt-4 grid grid-cols-1 gap-1 sm:grid-cols-2"
+          >
+            {(
+              Object.entries(socialFormats) as [SocialFormatKey, SocialFormat][]
+            ).map(([key, format]) => {
+              const selected = key === selectedFormat;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  aria-pressed={selected}
+                  disabled={!uploadedImage || isUploading}
+                  onClick={() => chooseFormat(key)}
+                  className={`flex items-center gap-3 rounded-lg border px-2 py-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                    selected
+                      ? "border-primary bg-primary/5 text-primary"
+                      : "border-transparent text-fg-3 hover:bg-base-300/60"
+                  }`}
+                >
+                  <RatioFrame width={format.width} height={format.height} />
+                  <span className="min-w-0">
+                    <span className="block truncate text-[13px] font-medium text-base-content">
+                      {format.name}
+                    </span>
+                    <span className="block font-mono text-xs tabular-nums text-fg-3">
+                      {format.width} × {format.height}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
           </div>
+
+          {!uploadedImage && (
+            <p className="mt-3 text-xs text-fg-3">
+              Upload an image to choose a format
+            </p>
+          )}
         </section>
 
-        {/* Image Preview */}
         {uploadedImage && (
-          <section className="overflow-hidden rounded-3xl border border-base-300/70 bg-base-100 shadow-sm md:col-span-2">
-            <div className="border-b border-base-200 px-5 py-4 sm:px-6">
-              <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-base-content/40">03 · Preview</p>
-                  <h2 className="mt-1 text-lg font-semibold tracking-tight">
-                    {currentFormat ? `${currentFormat.name} preview` : "Your image preview"}
-                  </h2>
-                </div>
-                {currentFormat && <span className="w-fit rounded-full bg-success/10 px-3 py-1.5 text-xs font-semibold text-success">{currentFormat.width} × {currentFormat.height}</span>}
-              </div>
+          <section className="overflow-hidden rounded-xl border border-line bg-base-100 md:col-span-2">
+            <div className="flex flex-col justify-between gap-2 border-b border-line px-5 py-4 sm:flex-row sm:items-center">
+              <h2 className="flex items-baseline gap-2 text-sm font-medium">
+                <span className="font-mono text-xs text-fg-3">3</span>
+                {currentFormat ? currentFormat.name : "Original image"}
+              </h2>
+              <p className="font-mono text-xs tabular-nums text-fg-3">
+                {currentFormat
+                  ? `${currentFormat.width} × ${currentFormat.height} · ${currentFormat.ratio}`
+                  : `${uploadedImage.width} × ${uploadedImage.height}`}
+              </p>
             </div>
 
-            <div className="p-5 sm:p-6">
-              <div className="relative flex min-h-64 items-center justify-center overflow-hidden rounded-2xl border border-base-300/70 bg-base-200 p-5 sm:min-h-80">
+            <div className="p-5">
+              <div className="relative flex min-h-64 items-center justify-center rounded-lg bg-base-200 p-6 sm:min-h-80">
                 {isTransforming && (
-                  <div className="absolute inset-0 z-10 flex items-center justify-center bg-base-100/75 backdrop-blur-sm" aria-live="polite">
-                    <span className="loading loading-spinner loading-md text-primary" aria-label="Preparing preview" />
+                  <div
+                    className="absolute inset-0 z-10 grid place-items-center bg-base-200/70"
+                    aria-live="polite"
+                  >
+                    <span
+                      className="loading loading-spinner loading-sm text-fg-3"
+                      aria-label="Preparing preview"
+                    />
                   </div>
                 )}
-                <Image
-                  key={`${uploadedImage.publicId}-${selectedFormat}`}
-                  src={previewUrl}
-                  unoptimized
-                  width={currentFormat?.width ?? previewWidth}
-                  height={currentFormat?.height ?? previewHeight}
-                  onLoad={() => { setIsTransforming(false); setError(""); }}
-                  onError={() => { setIsTransforming(false); setError("Could not load the image preview. Please try uploading the image again."); }}
-                  alt={
-                    currentFormat
-                      ? "Transformed social media image"
-                      : "Uploaded image"
+                <div
+                  className="viewfinder max-w-full"
+                  style={
+                    {
+                      "--vf-color": "var(--color-base-content)",
+                      "--vf-inset": "-8px",
+                      "--vf-length": "14px",
+                    } as React.CSSProperties
                   }
-                  className="h-auto max-h-[70vh] max-w-full rounded-xl object-contain shadow-lg"
-                />
+                >
+                  {/* Cloudinary resizes and optimizes this preview itself. */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    key={`${uploadedImage.publicId}-${selectedFormat}`}
+                    src={previewUrl}
+                    width={currentFormat?.width ?? previewWidth}
+                    height={currentFormat?.height ?? previewHeight}
+                    onLoad={() => {
+                      setIsTransforming(false);
+                      setError("");
+                    }}
+                    onError={() => {
+                      setIsTransforming(false);
+                      setError(
+                        "The preview could not load. Upload the image again",
+                      );
+                    }}
+                    alt={
+                      currentFormat
+                        ? `Image cropped for ${currentFormat.name}`
+                        : "Uploaded image"
+                    }
+                    className="block h-auto max-h-[70vh] w-auto max-w-full rounded-sm object-contain"
+                  />
+                </div>
               </div>
 
               <div className="mt-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="text-sm text-base-content/60">
-                  <p className="text-xs font-medium uppercase tracking-wide text-base-content/40">Cloudinary public ID</p>
-                  <p className="mt-1 break-all font-mono text-xs">
+                <p className="min-w-0 text-xs text-fg-3">
+                  Public ID{" "}
+                  <span className="break-all font-mono text-fg-2">
                     {uploadedImage.publicId}
-                  </p>
-                </div>
+                  </span>
+                </p>
 
-                {currentFormat && (
+                {currentFormat ? (
                   <a
                     href={downloadUrl}
                     download
-                    className="btn btn-primary h-12 rounded-xl px-5"
+                    className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-content transition-[background-color,transform] hover:bg-primary/90 active:scale-[0.98]"
                   >
-                    Download full-size image
+                    <ArrowDownToLine className="size-4" strokeWidth={1.5} />
+                    Download {currentFormat.width} × {currentFormat.height}
                   </a>
+                ) : (
+                  <p className="text-xs text-fg-3">
+                    Choose a format to download
+                  </p>
                 )}
               </div>
             </div>
           </section>
         )}
       </div>
-    </main>
+    </div>
   );
 }
