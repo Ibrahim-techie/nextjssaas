@@ -1,77 +1,39 @@
 import { clerkMiddleware } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
+/** Pages anyone can open. Signed-in users are sent to /home instead. */
+const GUEST_PAGES = ["/", "/sign-in", "/sign-up"];
+
+/** API routes that authenticate themselves (signatures, not sessions). */
+const PUBLIC_API_PREFIXES = ["/api/public/", "/api/webhooks/"];
+
+function isGuestPage(pathname: string) {
+  return GUEST_PAGES.some(
+    (page) =>
+      pathname === page || (page !== "/" && pathname.startsWith(`${page}/`)),
+  );
+}
+
 export default clerkMiddleware(async (auth, req) => {
+  const { pathname } = req.nextUrl;
+
+  if (PUBLIC_API_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
+    return;
+  }
 
   const { userId } = await auth();
+  const guestPage = isGuestPage(pathname);
 
-  const url = new URL(req.url);
-
-
-
-  const apiRequest = url.pathname.startsWith("/api");
-
-  const isPublicApiRequest =
-    url.pathname === "/api/public" ||
-    url.pathname.startsWith("/api/public/");
-
-  // Public routes
-  const isPublicPaths = [
-    "/",
-    "/sign-in",
-    "/sign-up",
-    "/forgot-password",
-    "/reset-password",
-    "/verify-email",
-    "/verify-otp",
-    "/verify-phone",
-    "/verify-webauthn",
-    "/verify-totp",
-    "/verify-sms",
-    "/verify-email-otp",
-    "/verify-email-link",
-    "/contact",
-  ];
-
-  const isPublicPath =
-    isPublicPaths.includes(url.pathname) ||
-    ["/sign-in", "/sign-up"].some(
-      (path) => url.pathname.startsWith(`${path}/`),
-    );
-
-  // 1. Logged-in user accessing guest routes
-  if (
-    userId &&
-    isPublicPath &&
-    url.pathname !== "/home"
-  ) {
-    return NextResponse.redirect(
-      new URL("/home", req.url),
-      307
-    );
+  if (userId && guestPage) {
+    return NextResponse.redirect(new URL("/home", req.url), 307);
   }
 
-  // 2. Guest accessing protected routes
-  else if (
-    !userId &&
-    !isPublicPath &&
-    !isPublicApiRequest
-  ) {
-
-    // API requests should receive 401, not a page redirect
-    if (apiRequest) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      );
+  if (!userId && !guestPage) {
+    if (pathname.startsWith("/api/") || pathname.startsWith("/trpc/")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    return NextResponse.redirect(
-      new URL("/sign-in", req.url),
-      307
-    );
+    return NextResponse.redirect(new URL("/sign-in", req.url), 307);
   }
-
 });
 
 export const config = {
