@@ -1,30 +1,23 @@
 "use client";
 
 import { Moon, Sun } from "lucide-react";
-import { useTheme } from "next-themes";
-import { useSyncExternalStore } from "react";
-
-const subscribe = () => () => {};
-const getClientSnapshot = () => true;
-const getServerSnapshot = () => false;
+import { useThemeMode } from "@/lib/use-theme-mode";
 
 export default function ThemeToggle() {
-  const { resolvedTheme, setTheme } = useTheme();
-  const mounted = useSyncExternalStore(
-    subscribe,
-    getClientSnapshot,
-    getServerSnapshot,
-  );
-  const isDark = mounted && resolvedTheme === "frameflow-dark";
+  const { isDark, toggle } = useThemeMode();
 
   return (
     <button
       type="button"
-      className="btn btn-square btn-ghost rounded-xl"
+      className="grid size-9 place-items-center rounded-lg text-fg-2 transition-colors hover:bg-base-300 hover:text-base-content"
       aria-label={isDark ? "Switch to light theme" : "Switch to dark theme"}
-      onClick={() => setTheme(isDark ? "frameflow" : "frameflow-dark")}
+      onClick={toggle}
     >
-      {isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+      {isDark ? (
+        <Sun className="size-4" strokeWidth={1.5} />
+      ) : (
+        <Moon className="size-4" strokeWidth={1.5} />
+      )}
     </button>
   );
 }
